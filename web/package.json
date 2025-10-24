@@ -30,7 +30,8 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "vite build",
+    "build:check": "tsc && vite build",
     "preview": "vite preview",
     "start": "vite"
   },
@@ -53,8 +54,10 @@
     ]
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.1.16",
     "@types/hash-sum": "^1.0.0",
     "@vitejs/plugin-react": "^5.0.4",
+    "tailwindcss": "^4.1.16",
     "typescript": "^5.9.3",
     "vite": "^7.1.12"
   }
