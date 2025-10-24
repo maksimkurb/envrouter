@@ -38,7 +38,8 @@
     "build": "vite build",
     "build:check": "tsc && vite build",
     "preview": "vite preview",
-    "start": "vite"
+    "start": "vite",
+    "postinstall": "msw init public/ --save"
   },
   "eslintConfig": {
     "extends": [
@@ -62,9 +63,15 @@
     "@tailwindcss/vite": "^4.1.16",
     "@types/hash-sum": "^1.0.0",
     "@vitejs/plugin-react": "^5.0.4",
+    "msw": "^2.11.6",
     "shadcn": "^3.5.0",
     "tailwindcss": "^4.1.16",
     "typescript": "^5.9.3",
     "vite": "^7.1.12"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
   }
 }
