@@ -1,5 +1,5 @@
 import {WithStyles, withStyles} from "@mui/styles";
-import {Application, DefaultApiFp, Instance, InstancePod, Ref, RefBinding} from "../../axios";
+import {Application, DefaultApiFp, Instance, InstancePod, Ref, RefBinding} from "../../../axios";
 import {Theme} from "@mui/material/styles";
 import {CircularProgress, Grid, InputAdornment, TextField} from "@mui/material";
 import InstanceComponent from "./InstanceComponent";

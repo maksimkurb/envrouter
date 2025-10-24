@@ -2,10 +2,10 @@ import React from 'react';
 import './App.css';
 import {SnackbarProvider} from 'notistack';
 import { ThemeProvider} from '@mui/styles';
-import DashboardPage from './pages/dashboard/DashboardPage';
+import DashboardPage from './pages/v1/dashboard/DashboardPage';
 import {NavLink, Route, Routes, useLocation} from 'react-router-dom';
-import SettingsPage from './pages/settings/SettingsPage';
-import {Box, createTheme, CssBaseline, IconButton, ListItem, MenuItem, MenuList, Typography} from '@mui/material';
+import SettingsPage from './pages/v1/settings/SettingsPage';
+import {Box, createTheme, CssBaseline, IconButton, ListItem, MenuItem, MenuList, Typography, Button} from '@mui/material';
 import {CSSObject, styled, Theme} from '@mui/material/styles';
 import MuiAppBar, {AppBarProps as MuiAppBarProps} from '@mui/material/AppBar';
 import MuiDrawer from '@mui/material/Drawer';
@@ -165,13 +165,25 @@ function App() {
                   ))}
                 </MenuList>
                 <Divider/>
+                <Box sx={{ p: 2 }}>
+                  <Button 
+                    variant="outlined" 
+                    fullWidth 
+                    component={NavLink} 
+                    to="/v2"
+                    sx={{ textTransform: 'none' }}
+                  >
+                    Try v2 (shadcn)
+                  </Button>
+                </Box>
+                <Divider/>
               </Drawer>
               <Box component="main" sx={{flexGrow: 1, p: 3}}>
                 <DrawerHeader/>
 
                 <Routes>
-                  <Route path="/repo" element={<SettingsPage/>}/>
                   <Route path="/" element={<DashboardPage/>}/>
+                  <Route path="/repo" element={<SettingsPage/>}/>
                 </Routes>
               </Box>
             </Box>

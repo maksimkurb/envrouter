@@ -2,7 +2,7 @@ import {Card, Chip, CircularProgress, Divider, Grid, List, ListItem} from "@mui/
 import React, {useEffect, useState} from "react";
 import {Theme} from "@mui/material/styles";
 import {WithStyles, withStyles} from "@mui/styles";
-import {Commit, DefaultApiFp, Application, InstancePod, Ref} from "../../axios";
+import {Commit, DefaultApiFp, Application, InstancePod, Ref} from "../../../axios";
 import {useSnackbar} from "notistack";
 
 interface InstancePodProps extends WithStyles<typeof styles> {

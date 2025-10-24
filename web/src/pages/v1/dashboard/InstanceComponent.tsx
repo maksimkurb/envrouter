@@ -1,4 +1,4 @@
-import {Application, Instance, InstancePod, Ref} from "../../axios";
+import {Application, Instance, InstancePod, Ref} from "../../../axios";
 import {withStyles, WithStyles} from "@mui/styles";
 import {Theme} from "@mui/material/styles";
 import {Chip, Dialog, DialogContent, DialogTitle} from "@mui/material";

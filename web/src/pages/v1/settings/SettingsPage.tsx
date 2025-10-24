@@ -1,5 +1,5 @@
 import {useState} from "react";
-import {Repository} from "../../axios";
+import {Repository} from "../../../axios";
 import RepositoryGridComponent from "./repository/RepositoryGridComponent";
 import ApplicationGridComponent from "./application/ApplicationGridComponent";
 

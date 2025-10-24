@@ -1,6 +1,6 @@
 import {WithStyles, withStyles} from "@mui/styles";
 import EditIcon from '@mui/icons-material/Edit';
-import {Application, DefaultApiFp, Repository} from "../../../axios";
+import {Application, DefaultApiFp, Repository} from "../../../../axios";
 import {Theme} from "@mui/material/styles";
 import {DataGrid, GridActionsCellItem, GridColumns,} from '@mui/x-data-grid';
 import {Container, Paper} from "@mui/material";

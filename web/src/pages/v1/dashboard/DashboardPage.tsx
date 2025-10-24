@@ -1,9 +1,9 @@
 import {Grid} from "@mui/material";
 import {useEffect, useState} from "react";
-import {Application, DefaultApiFp, Environment, Instance, InstancePod, Ref, RefBinding} from "../../axios";
+import {Application, DefaultApiFp, Environment, Instance, InstancePod, Ref, RefBinding} from "../../../axios";
 import EnvironmentComponent from "./EnvironmentComponent";
-import {SSEvent} from "../../sse/api";
-import {BASE_PATH} from "../../axios/base";
+import {SSEvent} from "../../../sse/api";
+import {BASE_PATH} from "../../../axios/base";
 
 const api = DefaultApiFp()
 

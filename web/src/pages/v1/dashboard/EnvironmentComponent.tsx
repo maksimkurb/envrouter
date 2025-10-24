@@ -1,5 +1,5 @@
 import {WithStyles, withStyles} from "@mui/styles";
-import {Application, Environment, Instance, InstancePod, Ref, RefBinding} from "../../axios";
+import {Application, Environment, Instance, InstancePod, Ref, RefBinding} from "../../../axios";
 import {Theme} from "@mui/material/styles";
 import {Card, CardContent, CardHeader} from "@mui/material";
 import ApplicationComponent from "./ApplicationComponent";
