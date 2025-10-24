@@ -18,7 +18,7 @@ import { Configuration } from "./configuration";
 // @ts-ignore
 import globalAxios, { AxiosPromise, AxiosInstance, AxiosRequestConfig } from 'axios';
 
-const basePath = process.env.REACT_APP_BASE_PATH || '';
+const basePath = import.meta.env.VITE_BASE_PATH || '';
 export const BASE_PATH = basePath.replace(/\/+$/, "");
 
 /**
