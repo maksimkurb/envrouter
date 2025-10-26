@@ -4,8 +4,16 @@ import { SSEvent } from '@/sse/api'
 import { BASE_PATH } from '@/axios/base'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ChevronRight, ChevronDown, Search, Loader2 } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Button } from '@/components/ui/button'
+import { ChevronRight, ChevronDown, Search, Loader2, ExpandIcon, ListChevronsUpDown, ListChevronsDownUp } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
 import InstanceBadge from './components/InstanceBadge'
@@ -19,9 +27,17 @@ export default function DashboardPage() {
   const [instances, setInstances] = useState<Instance[]>([])
   const [instancePods, setInstancePods] = useState<InstancePod[]>([])
   const [refsHeads, setRefsHeads] = useState<Ref[]>([])
-  const [filterEnvironment, setFilterEnvironment] = useState<string>('all')
-  const [searchQuery, setSearchQuery] = useState<string>('')
-  const [expandedEnvs, setExpandedEnvs] = useState<Set<string>>(new Set())
+  const [selectedEnvironments, setSelectedEnvironments] = useState<Set<string>>(new Set())
+  const [serviceSearchQuery, setServiceSearchQuery] = useState<string>('')
+  const [branchSearchQuery, setBranchSearchQuery] = useState<string>('')
+  const [expandedEnvs, setExpandedEnvs] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('envrouter_envs_state')
+      return saved ? new Set(JSON.parse(saved)) : new Set()
+    } catch {
+      return new Set()
+    }
+  })
   const { toast } = useToast()
 
   const onSSEvent = (e: SSEvent) => {
@@ -97,14 +113,40 @@ export default function DashboardPage() {
       } else {
         newSet.add(envName)
       }
+      localStorage.setItem('envrouter_envs_state', JSON.stringify(Array.from(newSet)))
+      return newSet
+    })
+  }
+
+  const collapseAll = () => {
+    setExpandedEnvs(new Set())
+    localStorage.setItem('envrouter_envs_state', JSON.stringify([]))
+  }
+
+  const expandAll = () => {
+    const allEnvNames = new Set(environments.map((env) => env.name))
+    setExpandedEnvs(allEnvNames)
+    localStorage.setItem('envrouter_envs_state', JSON.stringify(Array.from(allEnvNames)))
+  }
+
+  const toggleEnvironmentFilter = (envName: string) => {
+    setSelectedEnvironments((current) => {
+      const newSet = new Set(current)
+      if (newSet.has(envName)) {
+        newSet.delete(envName)
+      } else {
+        newSet.add(envName)
+      }
       return newSet
     })
   }
 
   const filteredEnvironments = environments.filter((env) => {
-    if (filterEnvironment !== 'all' && env.name !== filterEnvironment) return false
+    if (selectedEnvironments.size > 0 && !selectedEnvironments.has(env.name)) return false
     return true
   })
+
+  const selectedEnvNames = Array.from(selectedEnvironments).sort().join(', ')
 
   useEffect(() => {
     const eventSource = new EventSource(`${BASE_PATH}/api/v1/subscription`)
@@ -125,8 +167,13 @@ export default function DashboardPage() {
       setInstances(instances.data)
       setInstancePods(instancePods.data.sort((a, b) => a.createdTime.localeCompare(b.createdTime)))
       setRefsHeads(refsHeads.data)
-      // Expand all environments by default
-      setExpandedEnvs(new Set(sortedEnvs.map((env) => env.name)))
+      // Only expand all if no saved state exists
+      const saved = localStorage.getItem('envrouter_envs_state')
+      if (!saved) {
+        const allEnvNames = new Set(sortedEnvs.map((env) => env.name))
+        setExpandedEnvs(allEnvNames)
+        localStorage.setItem('envrouter_envs_state', JSON.stringify(Array.from(allEnvNames)))
+      }
     })
 
     return () => {
@@ -137,32 +184,61 @@ export default function DashboardPage() {
   return (
     <div className="space-y-4">
       {/* Filter Controls */}
-      <div className="flex gap-4">
+      <div className="flex gap-4 items-center flex-wrap">
         <div className="w-64">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Поиск по Service / Branch"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Service filter"
+              value={serviceSearchQuery}
+              onChange={(e) => setServiceSearchQuery(e.target.value)}
               className="pl-9"
             />
           </div>
         </div>
-        <div className="w-48">
-          <Select value={filterEnvironment} onValueChange={setFilterEnvironment}>
-            <SelectTrigger>
-              <SelectValue placeholder="Фильтр по Env" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Все среды</SelectItem>
+        <div className="w-64">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Branch filter"
+              value={branchSearchQuery}
+              onChange={(e) => setBranchSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+        </div>
+        <div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="min-w-48 max-w-md justify-start">
+                <span className="truncate">
+                  {selectedEnvironments.size === 0 ? 'All environments' : selectedEnvNames}
+                </span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56">
+              <DropdownMenuLabel>Environment filter</DropdownMenuLabel>
+              <DropdownMenuSeparator />
               {environments.map((env) => (
-                <SelectItem key={env.name} value={env.name}>
+                <DropdownMenuCheckboxItem
+                  key={env.name}
+                  checked={selectedEnvironments.has(env.name)}
+                  onCheckedChange={() => toggleEnvironmentFilter(env.name)}
+                  onSelect={(e) => e.preventDefault()}
+                >
                   {env.name}
-                </SelectItem>
+                </DropdownMenuCheckboxItem>
               ))}
-            </SelectContent>
-          </Select>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={expandAll} title="Expand All">
+            <ListChevronsUpDown />
+          </Button>
+          <Button variant="outline" size="sm" onClick={collapseAll} title="Collapse All">
+            <ListChevronsDownUp />
+          </Button>
         </div>
       </div>
 
@@ -181,14 +257,21 @@ export default function DashboardPage() {
             {filteredEnvironments.map((environment) => {
               const isExpanded = expandedEnvs.has(environment.name)
               const envApplications = applications.filter((app) => {
-                if (!searchQuery) return true
                 const refBinding = refBindings.find(
                   (r) => r.environment === environment.name && r.application === app.name
                 )
-                return (
-                  app.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                  refBinding?.ref?.toLowerCase().includes(searchQuery.toLowerCase())
-                )
+
+                // Filter by service name
+                if (serviceSearchQuery && !app.name.toLowerCase().includes(serviceSearchQuery.toLowerCase())) {
+                  return false
+                }
+
+                // Filter by branch name
+                if (branchSearchQuery && !refBinding?.ref?.toLowerCase().includes(branchSearchQuery.toLowerCase())) {
+                  return false
+                }
+
+                return true
               })
 
               if (envApplications.length === 0) return null
@@ -304,20 +387,22 @@ function ServiceRow({
         <small className="text-sm text-muted-foreground">{application.name}</small>
       </TableCell>
       <TableCell>
-        <div className="relative max-w-xs">
-          <Input
-            value={ref}
-            onChange={(e) => setRef(e.target.value)}
-            onBlur={(e) => onRefChanged(e.target.value)}
-            className={`h-8 text-sm ${!refExists && ref ? 'border-destructive' : ''}`}
-          />
+        <div className="space-y-1">
+          <div className="relative max-w-xs">
+            <Input
+              value={ref}
+              onChange={(e) => setRef(e.target.value)}
+              onBlur={(e) => onRefChanged(e.target.value)}
+              className={`h-8 text-sm ${!refExists && ref ? 'border-destructive' : ''}`}
+            />
+            {deploying && (
+              <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              </div>
+            )}
+          </div>
           {!refExists && ref && (
-            <Label className="text-xs text-destructive absolute -bottom-4 left-0">Ref does not exist</Label>
-          )}
-          {deploying && (
-            <div className="absolute right-2 top-1/2 -translate-y-1/2">
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-            </div>
+            <Label className="text-xs text-destructive block">Ref does not exist</Label>
           )}
         </div>
       </TableCell>

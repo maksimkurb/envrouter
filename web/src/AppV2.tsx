@@ -21,9 +21,6 @@ function V2App() {
                   <Button variant="outline" asChild>
                     <Link to="/">← Back to v1 (MUI)</Link>
                   </Button>
-                  <span className="text-sm text-muted-foreground">
-                    Modern Interface
-                  </span>
                 </div>
               </div>
             </header>
