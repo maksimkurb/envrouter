@@ -3,8 +3,6 @@ import './App.css';
 import {SnackbarProvider} from 'notistack';
 import { ThemeProvider} from '@mui/styles';
 import DashboardPage from './pages/v1/dashboard/DashboardPage';
-import DashboardPageV2 from './pages/v2/DashboardPage';
-import V2Layout from './pages/v2/V2Layout';
 import {NavLink, Route, Routes, useLocation} from 'react-router-dom';
 import SettingsPage from './pages/v1/settings/SettingsPage';
 import {Box, createTheme, CssBaseline, IconButton, ListItem, MenuItem, MenuList, Typography, Button} from '@mui/material';
@@ -20,6 +18,7 @@ import ListItemText from '@mui/material/ListItemText';
 import MenuIcon from '@mui/icons-material/Menu';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import SourceIcon from '@mui/icons-material/Source';
+import { SparkleIcon } from 'lucide-react';
 
 const theme = createTheme({
   palette: {
@@ -167,18 +166,20 @@ function App() {
                   ))}
                 </MenuList>
                 <Divider/>
-                <Box sx={{ p: 2 }}>
-                  <Button 
-                    variant="outlined" 
-                    fullWidth 
-                    component={NavLink} 
-                    to="/v2"
-                    sx={{ textTransform: 'none' }}
-                  >
-                    Try v2 (shadcn)
-                  </Button>
-                </Box>
-                <Divider/>
+                <MenuList>
+                  {[
+                    {title: 'New UI (v2)', icon: <SparkleIcon />, path: '/v2'},
+                  ].map((item, index) => (
+                      <NavLink to={item.path} style={{textDecoration: 'none'}} key={item.path}>
+                        <ListItem key={item.title} selected={activeRoute(item.path)}>
+                          <ListItemIcon>
+                            {item.icon}
+                          </ListItemIcon>
+                          <ListItemText primary={item.title}/>
+                        </ListItem>
+                      </NavLink>
+                  ))}
+                </MenuList>
               </Drawer>
               <Box component="main" sx={{flexGrow: 1, p: 3}}>
                 <DrawerHeader/>
@@ -186,7 +187,6 @@ function App() {
                 <Routes>
                   <Route path="/" element={<DashboardPage/>}/>
                   <Route path="/repo" element={<SettingsPage/>}/>
-                  <Route path="/v2" element={<V2Layout><DashboardPageV2/></V2Layout>}/>
                 </Routes>
               </Box>
             </Box>

@@ -1,4 +1,3 @@
-import React from 'react';
 import { Routes, Route, Link } from 'react-router-dom';
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
@@ -11,12 +10,12 @@ function V2App() {
     <div className="min-h-screen bg-gray-50">
       <div className="flex">
         <SidebarProvider>
-          <AppSidebar />
+          <AppSidebar collapsible="icon" />
           <main className="flex-1">
             <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4 bg-white">
               <SidebarTrigger />
               <div className="flex flex-1 items-center justify-between">
-                <h1 className="text-lg font-semibold">EnvRouter v2</h1>
+                <h1 className="text-lg font-semibold">EnvRouter</h1>
                 <div className="flex items-center gap-2">
                   <Button variant="outline" asChild>
                     <Link to="/">← Back to v1 (MUI)</Link>
@@ -27,7 +26,6 @@ function V2App() {
             <div className="flex-1 p-6">
               <Routes>
                 <Route path="/" element={<DashboardPage/>}/>
-                <Route path="/dashboard" element={<DashboardPage/>}/>
                 <Route path="/repo" element={<RepositoriesPage/>}/>
               </Routes>
             </div>

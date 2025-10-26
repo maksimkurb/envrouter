@@ -14,23 +14,27 @@ const renderApp = () => {
         <MainRouter/>
     </React.StrictMode>
   );
-  
+
   reportWebVitals();
 };
 
-// Enable MSW in development
+// Enable MSW in development only - tree-shaking friendly
 if (import.meta.env.DEV) {
-  import('./mocks').then(async ({ worker, setupMockSSE }) => {
+  // Dynamic import ensures MSW is not bundled in production
+  import('./mocks/index').then(async ({ worker, setupMockSSE }) => {
     // Start MSW and wait for it to be ready
     await worker.start({
       onUnhandledRequest: 'bypass', // Don't warn about unhandled requests
     })
-    
 
     // Setup mock SSE
     setupMockSSE()
-    
+
     // Render app AFTER MSW is ready
+    renderApp()
+  }).catch((err) => {
+    console.error('Failed to initialize MSW:', err)
+    // Render app anyway if MSW fails
     renderApp()
   })
 } else {

@@ -29,7 +29,7 @@ export function VersionSwitcher({
     if (version.includes("v1")) {
       window.location.href = "/" // Old MUI interface
     } else {
-      window.location.href = "/v2/dashboard" // New shadcn interface
+      window.location.href = "/v2" // New shadcn interface
     }
   }
 
