@@ -1,135 +1,123 @@
-import React from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useEffect, useState } from 'react'
+import { Application, DefaultApiFp, Environment, Instance, InstancePod, Ref, RefBinding } from '@/axios'
+import { SSEvent } from '@/sse/api'
+import { BASE_PATH } from '@/axios/base'
+import EnvironmentCard from './components/EnvironmentCard'
+
+const api = DefaultApiFp()
 
 export default function DashboardPage() {
+  const [environments, setEnvironments] = useState<Environment[]>([])
+  const [applications, setApplications] = useState<Application[]>([])
+  const [refBindings, setRefBindings] = useState<RefBinding[]>([])
+  const [instances, setInstances] = useState<Instance[]>([])
+  const [instancePods, setInstancePods] = useState<InstancePod[]>([])
+  const [refsHeads, setRefsHeads] = useState<Ref[]>([])
+
+  const onSSEvent = (e: SSEvent) => {
+    switch (e.itemType) {
+      case 'InstancePod': {
+        const instancePod = e.item as InstancePod
+        setInstancePods((current) => {
+          const index = current.findIndex((i) => i.name === instancePod.name)
+          if (e.event === 'DELETED') {
+            return [...current.slice(0, index), ...current.slice(index + 1)]
+          } else if (index === -1) {
+            return [...current, instancePod]
+          } else {
+            return [...current.slice(0, index), instancePod, ...current.slice(index + 1)]
+          }
+        })
+        break
+      }
+      case 'Instance': {
+        const instance = e.item as Instance
+        setInstances((current) => {
+          const index = current.findIndex(
+            (i) =>
+              i.name === instance.name &&
+              i.application === instance.application &&
+              i.environment === instance.environment
+          )
+          if (e.event === 'DELETED') {
+            return [...current.slice(0, index), ...current.slice(index + 1)]
+          } else if (index === -1) {
+            return [...current, instance]
+          } else {
+            return [...current.slice(0, index), instance, ...current.slice(index + 1)]
+          }
+        })
+        break
+      }
+      case 'RefHead': {
+        const ref = e.item as Ref
+        setRefsHeads((current) => {
+          const index = current.findIndex((r) => r.repository === ref.repository && r.ref === ref.ref)
+          if (e.event === 'DELETED') {
+            return [...current.slice(0, index), ...current.slice(index + 1)]
+          } else if (index === -1) {
+            return [...current, ref]
+          } else {
+            return [...current.slice(0, index), ref, ...current.slice(index + 1)]
+          }
+        })
+        break
+      }
+    }
+  }
+
+  const updateRefBinding = (newRefBinding: RefBinding) => {
+    setRefBindings((current) => {
+      const index = current.findIndex(
+        (r) => r.environment === newRefBinding.environment && r.application === newRefBinding.application
+      )
+      if (index === -1) {
+        return [...current, newRefBinding]
+      } else {
+        return [...current.slice(0, index), newRefBinding, ...current.slice(index + 1)]
+      }
+    })
+  }
+
+  useEffect(() => {
+    const eventSource = new EventSource(`${BASE_PATH}/api/v1/subscription`)
+    eventSource.onmessage = (e) => onSSEvent(JSON.parse(e.data) as SSEvent)
+
+    Promise.all([
+      api.apiV1EnvironmentsGet().then((request) => request()),
+      api.apiV1ApplicationsGet().then((request) => request()),
+      api.apiV1RefBindingsGet().then((request) => request()),
+      api.apiV1InstancesGet().then((request) => request()),
+      api.apiV1InstancePodsGet().then((request) => request()),
+      api.apiV1GitRefsGet().then((request) => request()),
+    ]).then(([envs, apps, refs, instances, instancePods, refsHeads]) => {
+      setRefBindings(refs.data)
+      setEnvironments(envs.data.sort((a, b) => a.name.localeCompare(b.name)))
+      setApplications(apps.data.sort((a, b) => a.name.localeCompare(b.name)))
+      setInstances(instances.data)
+      setInstancePods(instancePods.data.sort((a, b) => a.createdTime.localeCompare(b.createdTime)))
+      setRefsHeads(refsHeads.data)
+    })
+
+    return () => {
+      eventSource.close()
+    }
+  }, [])
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-        <p className="text-muted-foreground">
-          Overview of your environments and deployments
-        </p>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Environments</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">4</div>
-            <p className="text-xs text-muted-foreground">
-              dev, qa, staging, prod
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Applications</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">4</div>
-            <p className="text-xs text-muted-foreground">
-              frontend, backend, auth, notifier
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Running Pods</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">14/15</div>
-            <p className="text-xs text-muted-foreground">
-              93% healthy
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Repositories</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">3</div>
-            <p className="text-xs text-muted-foreground">
-              Connected
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Deployments</CardTitle>
-            <CardDescription>
-              Latest deployment activity
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center">
-                <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">frontend → dev</p>
-                  <p className="text-xs text-muted-foreground">2 hours ago</p>
-                </div>
-              </div>
-              <div className="flex items-center">
-                <div className="w-2 h-2 bg-yellow-500 rounded-full mr-3"></div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">backend → dev</p>
-                  <p className="text-xs text-muted-foreground">Deploying...</p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Environment Status</CardTitle>
-            <CardDescription>
-              Current environment health
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Development</span>
-                <div className="flex items-center">
-                  <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                  <span className="text-sm">Healthy</span>
-                </div>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">QA</span>
-                <div className="flex items-center">
-                  <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                  <span className="text-sm">Healthy</span>
-                </div>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Staging</span>
-                <div className="flex items-center">
-                  <div className="w-2 h-2 bg-yellow-500 rounded-full mr-2"></div>
-                  <span className="text-sm">Warning</span>
-                </div>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Production</span>
-                <div className="flex items-center">
-                  <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                  <span className="text-sm">Healthy</span>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      {environments.map((environment) => (
+        <EnvironmentCard
+          key={environment.name}
+          environment={environment}
+          applications={applications}
+          refBindings={refBindings.filter((r) => r.environment === environment.name)}
+          instances={instances.filter((i) => i.environment === environment.name)}
+          instancePods={instancePods.filter((i) => i.environment === environment.name)}
+          onRefBindingChanged={(refBinding) => updateRefBinding(refBinding)}
+          refsHeads={refsHeads}
+        />
+      ))}
     </div>
   )
 }

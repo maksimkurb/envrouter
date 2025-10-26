@@ -3,6 +3,8 @@ import './App.css';
 import {SnackbarProvider} from 'notistack';
 import { ThemeProvider} from '@mui/styles';
 import DashboardPage from './pages/v1/dashboard/DashboardPage';
+import DashboardPageV2 from './pages/v2/DashboardPage';
+import V2Layout from './pages/v2/V2Layout';
 import {NavLink, Route, Routes, useLocation} from 'react-router-dom';
 import SettingsPage from './pages/v1/settings/SettingsPage';
 import {Box, createTheme, CssBaseline, IconButton, ListItem, MenuItem, MenuList, Typography, Button} from '@mui/material';
@@ -184,6 +186,7 @@ function App() {
                 <Routes>
                   <Route path="/" element={<DashboardPage/>}/>
                   <Route path="/repo" element={<SettingsPage/>}/>
+                  <Route path="/v2" element={<V2Layout><DashboardPageV2/></V2Layout>}/>
                 </Routes>
               </Box>
             </Box>

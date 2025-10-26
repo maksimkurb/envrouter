@@ -1,6 +1,7 @@
 import React from 'react'
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
+import { Toaster } from 'sonner'
 
 interface V2LayoutProps {
   children: React.ReactNode
@@ -24,6 +25,7 @@ export default function V2Layout({ children }: V2LayoutProps) {
         </header>
         <div className="flex-1 p-6">{children}</div>
       </main>
+      <Toaster />
     </SidebarProvider>
   )
 }
