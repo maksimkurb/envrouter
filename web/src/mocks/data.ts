@@ -8,6 +8,7 @@ import {
   InstancePod,
   CredentialsSecretListItem,
   Commit,
+  InstanceTypeEnum,
 } from '../axios/api'
 
 // Environments
@@ -162,7 +163,7 @@ export const mockRefBindings: RefBinding[] = [
 export const mockInstances: Instance[] = [
   // Dev
   {
-    type: 'deployment' as const,
+    type: InstanceTypeEnum.Deployment,
     name: 'frontend-dev',
     environment: 'dev',
     application: 'frontend',
@@ -170,7 +171,7 @@ export const mockInstances: Instance[] = [
     commitSha: mockCommits.develop.sha,
   },
   {
-    type: 'deployment' as const,
+    type: InstanceTypeEnum.Deployment,
     name: 'backend-dev',
     environment: 'dev',
     application: 'backend',
@@ -178,7 +179,7 @@ export const mockInstances: Instance[] = [
     commitSha: mockCommits.develop.sha,
   },
   {
-    type: 'deployment' as const,
+    type: InstanceTypeEnum.Deployment,
     name: 'auth-dev',
     environment: 'dev',
     application: 'auth',
@@ -186,7 +187,7 @@ export const mockInstances: Instance[] = [
     commitSha: mockCommits.develop.sha,
   },
   {
-    type: 'deployment' as const,
+    type: InstanceTypeEnum.Deployment,
     name: 'notifier-dev',
     environment: 'dev',
     application: 'notifier',
@@ -196,7 +197,7 @@ export const mockInstances: Instance[] = [
 
   // QA
   {
-    type: 'deployment' as const,
+    type: InstanceTypeEnum.Deployment,
     name: 'frontend-qa',
     environment: 'qa',
     application: 'frontend',
@@ -204,7 +205,7 @@ export const mockInstances: Instance[] = [
     commitSha: mockCommits.feature1.sha,
   },
   {
-    type: 'deployment' as const,
+    type: InstanceTypeEnum.Deployment,
     name: 'backend-qa',
     environment: 'qa',
     application: 'backend',
@@ -212,7 +213,7 @@ export const mockInstances: Instance[] = [
     commitSha: mockCommits.develop.sha,
   },
   {
-    type: 'deployment' as const,
+    type: InstanceTypeEnum.Deployment,
     name: 'auth-qa',
     environment: 'qa',
     application: 'auth',
@@ -222,7 +223,7 @@ export const mockInstances: Instance[] = [
 
   // Staging
   {
-    type: 'deployment' as const,
+    type: InstanceTypeEnum.Deployment,
     name: 'frontend-staging',
     environment: 'staging',
     application: 'frontend',
@@ -230,7 +231,7 @@ export const mockInstances: Instance[] = [
     commitSha: mockCommits.main.sha,
   },
   {
-    type: 'deployment' as const,
+    type: InstanceTypeEnum.Deployment,
     name: 'backend-staging',
     environment: 'staging',
     application: 'backend',
@@ -240,7 +241,7 @@ export const mockInstances: Instance[] = [
 
   // Prod
   {
-    type: 'deployment' as const,
+    type: InstanceTypeEnum.Deployment,
     name: 'frontend-prod',
     environment: 'prod',
     application: 'frontend',
@@ -248,7 +249,7 @@ export const mockInstances: Instance[] = [
     commitSha: mockCommits.main.sha,
   },
   {
-    type: 'deployment' as const,
+    type: InstanceTypeEnum.Deployment,
     name: 'backend-prod',
     environment: 'prod',
     application: 'backend',
@@ -256,7 +257,7 @@ export const mockInstances: Instance[] = [
     commitSha: mockCommits.main.sha,
   },
   {
-    type: 'deployment' as const,
+    type: InstanceTypeEnum.Deployment,
     name: 'auth-prod',
     environment: 'prod',
     application: 'auth',

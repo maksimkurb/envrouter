@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
-import { ChevronRight, ChevronDown, Search, Loader2, ExpandIcon, ListChevronsUpDown, ListChevronsDownUp } from 'lucide-react'
+import { ChevronRight, ChevronDown, Search, Loader2, ListChevronsUpDown, ListChevronsDownUp, CircleSlash } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
 import InstanceBadge from './components/InstanceBadge'
@@ -148,6 +148,27 @@ export default function DashboardPage() {
 
   const selectedEnvNames = Array.from(selectedEnvironments).sort().join(', ')
 
+  // Check if there are any matching results
+  const hasResults = filteredEnvironments.some((environment) => {
+    const envApplications = applications.filter((app) => {
+      const refBinding = refBindings.find(
+        (r) => r.environment === environment.name && r.application === app.name
+      )
+
+      if (serviceSearchQuery && !app.name.toLowerCase().includes(serviceSearchQuery.toLowerCase())) {
+        return false
+      }
+
+      if (branchSearchQuery && !refBinding?.ref?.toLowerCase().includes(branchSearchQuery.toLowerCase())) {
+        return false
+      }
+
+      return true
+    })
+
+    return envApplications.length > 0
+  })
+
   useEffect(() => {
     const eventSource = new EventSource(`${BASE_PATH}/api/v1/subscription`)
     eventSource.onmessage = (e) => onSSEvent(JSON.parse(e.data) as SSEvent)
@@ -243,17 +264,26 @@ export default function DashboardPage() {
       </div>
 
       {/* Table */}
-      <div className="border rounded-lg">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-12"></TableHead>
-              <TableHead>Service</TableHead>
-              <TableHead>Target Branch</TableHead>
-              <TableHead>Pods</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+      {!hasResults ? (
+        <div className="border rounded-lg p-12 flex flex-col items-center justify-center gap-4 text-muted-foreground">
+          <CircleSlash className="h-16 w-16" />
+          <div className="text-center">
+            <p className="text-lg font-medium">No results found</p>
+            <p className="text-sm">Try adjusting your filters to find what you're looking for</p>
+          </div>
+        </div>
+      ) : (
+        <div className="border rounded-lg">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-12"></TableHead>
+                <TableHead>Service</TableHead>
+                <TableHead>Target Branch</TableHead>
+                <TableHead>Pods</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
             {filteredEnvironments.map((environment) => {
               const isExpanded = expandedEnvs.has(environment.name)
               const envApplications = applications.filter((app) => {
@@ -324,6 +354,7 @@ export default function DashboardPage() {
           </TableBody>
         </Table>
       </div>
+      )}
     </div>
   )
 }
