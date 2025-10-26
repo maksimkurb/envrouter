@@ -13,53 +13,64 @@ import {
 
 // Environments
 export const mockEnvironments: Environment[] = [
-  { name: 'dev' },
-  { name: 'qa' },
-  { name: 'staging' },
-  { name: 'prod' },
+  { name: 'dev1' },
+  { name: 'dev2' },
+  { name: 'dev3' },
+  { name: 'dev4' },
+  { name: 'dev5' },
+  { name: 'qa1' },
+  { name: 'qa2' },
+  { name: 'qa3' },
+  { name: 'qa4' },
+  { name: 'qa5' },
+  { name: 'staging1' },
+  { name: 'staging2' },
+  { name: 'staging3' },
+  { name: 'staging4' },
+  { name: 'staging5' },
+  { name: 'prod1' },
+  { name: 'prod2' },
+  { name: 'prod3' },
+  { name: 'prod4' },
+  { name: 'prod5' },
 ]
 
 // Repositories
 export const mockRepositories: Repository[] = [
-  {
-    name: 'frontend-app',
-    url: 'https://github.com/company/frontend-app.git',
-    credentialsSecret: 'github-creds',
-  },
-  {
-    name: 'backend-api',
-    url: 'https://github.com/company/backend-api.git',
-    credentialsSecret: 'github-creds',
-  },
-  {
-    name: 'auth-service',
-    url: 'https://github.com/company/auth-service.git',
-    credentialsSecret: 'github-creds',
-  },
+  { name: 'frontend-app', url: 'https://github.com/company/frontend-app.git', credentialsSecret: 'github-creds' },
+  { name: 'backend-api', url: 'https://github.com/company/backend-api.git', credentialsSecret: 'github-creds' },
+  { name: 'auth-service', url: 'https://github.com/company/auth-service.git', credentialsSecret: 'github-creds' },
+  { name: 'payment-service', url: 'https://github.com/company/payment-service.git', credentialsSecret: 'github-creds' },
+  { name: 'notification-service', url: 'https://github.com/company/notification-service.git', credentialsSecret: 'github-creds' },
+  { name: 'user-service', url: 'https://github.com/company/user-service.git', credentialsSecret: 'github-creds' },
+  { name: 'order-service', url: 'https://github.com/company/order-service.git', credentialsSecret: 'github-creds' },
+  { name: 'inventory-service', url: 'https://github.com/company/inventory-service.git', credentialsSecret: 'github-creds' },
+  { name: 'analytics-service', url: 'https://github.com/company/analytics-service.git', credentialsSecret: 'github-creds' },
+  { name: 'search-service', url: 'https://github.com/company/search-service.git', credentialsSecret: 'github-creds' },
+  { name: 'cdn-service', url: 'https://github.com/company/cdn-service.git', credentialsSecret: 'github-creds' },
+  { name: 'logging-service', url: 'https://github.com/company/logging-service.git', credentialsSecret: 'github-creds' },
+  { name: 'monitoring-service', url: 'https://github.com/company/monitoring-service.git', credentialsSecret: 'github-creds' },
+  { name: 'admin-panel', url: 'https://github.com/company/admin-panel.git', credentialsSecret: 'github-creds' },
+  { name: 'mobile-backend', url: 'https://github.com/company/mobile-backend.git', credentialsSecret: 'github-creds' },
 ]
 
 // Applications
 export const mockApplications: Application[] = [
-  {
-    name: 'frontend',
-    repositoryName: 'frontend-app',
-    webhook: 'https://ci.company.com/webhook/frontend',
-  },
-  {
-    name: 'backend',
-    repositoryName: 'backend-api',
-    webhook: 'https://ci.company.com/webhook/backend',
-  },
-  {
-    name: 'auth',
-    repositoryName: 'auth-service',
-    webhook: 'https://ci.company.com/webhook/auth',
-  },
-  {
-    name: 'notifier',
-    repositoryName: 'backend-api',
-    webhook: 'https://ci.company.com/webhook/notifier',
-  },
+  { name: 'frontend', repositoryName: 'frontend-app', webhook: 'https://ci.company.com/webhook/frontend' },
+  { name: 'backend', repositoryName: 'backend-api', webhook: 'https://ci.company.com/webhook/backend' },
+  { name: 'auth', repositoryName: 'auth-service', webhook: 'https://ci.company.com/webhook/auth' },
+  { name: 'payment', repositoryName: 'payment-service', webhook: 'https://ci.company.com/webhook/payment' },
+  { name: 'notification', repositoryName: 'notification-service', webhook: 'https://ci.company.com/webhook/notification' },
+  { name: 'user', repositoryName: 'user-service', webhook: 'https://ci.company.com/webhook/user' },
+  { name: 'order', repositoryName: 'order-service', webhook: 'https://ci.company.com/webhook/order' },
+  { name: 'inventory', repositoryName: 'inventory-service', webhook: 'https://ci.company.com/webhook/inventory' },
+  { name: 'analytics', repositoryName: 'analytics-service', webhook: 'https://ci.company.com/webhook/analytics' },
+  { name: 'search', repositoryName: 'search-service', webhook: 'https://ci.company.com/webhook/search' },
+  { name: 'cdn', repositoryName: 'cdn-service', webhook: 'https://ci.company.com/webhook/cdn' },
+  { name: 'logging', repositoryName: 'logging-service', webhook: 'https://ci.company.com/webhook/logging' },
+  { name: 'monitoring', repositoryName: 'monitoring-service', webhook: 'https://ci.company.com/webhook/monitoring' },
+  { name: 'admin', repositoryName: 'admin-panel', webhook: 'https://ci.company.com/webhook/admin' },
+  { name: 'mobile-api', repositoryName: 'mobile-backend', webhook: 'https://ci.company.com/webhook/mobile-api' },
 ]
 
 // Commits
@@ -90,392 +101,81 @@ const mockCommits: Record<string, Commit> = {
   },
 }
 
-// Git Refs
-export const mockRefs: Ref[] = [
-  {
-    ref: 'main',
-    repository: 'frontend-app',
-    commit: mockCommits.main,
-  },
-  {
-    ref: 'develop',
-    repository: 'frontend-app',
-    commit: mockCommits.develop,
-  },
-  {
-    ref: 'feature/user-profile',
-    repository: 'frontend-app',
-    commit: mockCommits.feature1,
-  },
-  {
-    ref: 'main',
-    repository: 'backend-api',
-    commit: mockCommits.main,
-  },
-  {
-    ref: 'develop',
-    repository: 'backend-api',
-    commit: mockCommits.develop,
-  },
-  {
-    ref: 'hotfix/security',
-    repository: 'backend-api',
-    commit: mockCommits.hotfix,
-  },
-  {
-    ref: 'main',
-    repository: 'auth-service',
-    commit: mockCommits.main,
-  },
-  {
-    ref: 'develop',
-    repository: 'auth-service',
-    commit: mockCommits.develop,
-  },
+// Git Refs - generate refs for all repositories
+const generateRefsForRepo = (repoName: string): Ref[] => [
+  { ref: 'main', repository: repoName, commit: mockCommits.main },
+  { ref: 'develop', repository: repoName, commit: mockCommits.develop },
+  { ref: 'feature/user-profile', repository: repoName, commit: mockCommits.feature1 },
+  { ref: 'hotfix/security', repository: repoName, commit: mockCommits.hotfix },
 ]
 
-// RefBindings - what should be deployed where
-export const mockRefBindings: RefBinding[] = [
-  // Dev environment
-  { environment: 'dev', application: 'frontend', ref: 'develop' },
-  { environment: 'dev', application: 'backend', ref: 'develop' },
-  { environment: 'dev', application: 'auth', ref: 'develop' },
-  { environment: 'dev', application: 'notifier', ref: 'feature/user-profile' },
+export const mockRefs: Ref[] = mockRepositories.flatMap((repo) => generateRefsForRepo(repo.name))
 
-  // QA environment
-  { environment: 'qa', application: 'frontend', ref: 'feature/user-profile' },
-  { environment: 'qa', application: 'backend', ref: 'develop' },
-  { environment: 'qa', application: 'auth', ref: 'main' },
-  { environment: 'qa', application: 'notifier', ref: 'develop' },
+// RefBindings - generate bindings for all environments and applications
+const refs = ['main', 'develop', 'feature/user-profile', 'hotfix/security']
+export const mockRefBindings: RefBinding[] = mockEnvironments.flatMap((env) =>
+  mockApplications.map((app, index) => ({
+    environment: env.name,
+    application: app.name,
+    // Vary the refs: prod uses main, dev uses develop, qa/staging mix it up
+    ref: env.name.startsWith('prod')
+      ? 'main'
+      : env.name.startsWith('dev')
+      ? 'develop'
+      : refs[index % refs.length],
+  }))
+)
 
-  // Staging environment
-  { environment: 'staging', application: 'frontend', ref: 'main' },
-  { environment: 'staging', application: 'backend', ref: 'hotfix/security' },
-  { environment: 'staging', application: 'auth', ref: 'main' },
+// Instances - generate instances for all ref bindings
+export const mockInstances: Instance[] = mockRefBindings.map((binding) => {
+  const refCommit =
+    binding.ref === 'main'
+      ? mockCommits.main
+      : binding.ref === 'develop'
+      ? mockCommits.develop
+      : binding.ref === 'feature/user-profile'
+      ? mockCommits.feature1
+      : mockCommits.hotfix
 
-  // Prod environment
-  { environment: 'prod', application: 'frontend', ref: 'main' },
-  { environment: 'prod', application: 'backend', ref: 'main' },
-  { environment: 'prod', application: 'auth', ref: 'main' },
-]
-
-// Instances - actual deployments
-export const mockInstances: Instance[] = [
-  // Dev
-  {
+  return {
     type: InstanceTypeEnum.Deployment,
-    name: 'frontend-dev',
-    environment: 'dev',
-    application: 'frontend',
-    ref: 'develop',
-    commitSha: mockCommits.develop.sha,
-  },
-  {
-    type: InstanceTypeEnum.Deployment,
-    name: 'backend-dev',
-    environment: 'dev',
-    application: 'backend',
-    ref: 'develop',
-    commitSha: mockCommits.develop.sha,
-  },
-  {
-    type: InstanceTypeEnum.Deployment,
-    name: 'auth-dev',
-    environment: 'dev',
-    application: 'auth',
-    ref: 'develop',
-    commitSha: mockCommits.develop.sha,
-  },
-  {
-    type: InstanceTypeEnum.Deployment,
-    name: 'notifier-dev',
-    environment: 'dev',
-    application: 'notifier',
-    ref: 'feature/user-profile',
-    commitSha: mockCommits.feature1.sha,
-  },
+    name: `${binding.application}-${binding.environment}`,
+    environment: binding.environment,
+    application: binding.application,
+    ref: binding.ref,
+    commitSha: refCommit.sha,
+  }
+})
 
-  // QA
-  {
-    type: InstanceTypeEnum.Deployment,
-    name: 'frontend-qa',
-    environment: 'qa',
-    application: 'frontend',
-    ref: 'feature/user-profile',
-    commitSha: mockCommits.feature1.sha,
-  },
-  {
-    type: InstanceTypeEnum.Deployment,
-    name: 'backend-qa',
-    environment: 'qa',
-    application: 'backend',
-    ref: 'develop',
-    commitSha: mockCommits.develop.sha,
-  },
-  {
-    type: InstanceTypeEnum.Deployment,
-    name: 'auth-qa',
-    environment: 'qa',
-    application: 'auth',
-    ref: 'main',
-    commitSha: mockCommits.main.sha,
-  },
+// InstancePods - generate pods for instances with varying statuses
+const phases = ['Running', 'Running', 'Running', 'Running', 'Pending', 'Failed']
+const generatePodsForInstance = (instance: Instance, podCount: number): InstancePod[] => {
+  return Array.from({ length: podCount }, (_, i) => {
+    const phase = phases[i % phases.length]
+    const ready = phase === 'Running' && i % 5 !== 4 // Most running pods are ready
+    const started = phase !== 'Pending'
 
-  // Staging
-  {
-    type: InstanceTypeEnum.Deployment,
-    name: 'frontend-staging',
-    environment: 'staging',
-    application: 'frontend',
-    ref: 'main',
-    commitSha: mockCommits.main.sha,
-  },
-  {
-    type: InstanceTypeEnum.Deployment,
-    name: 'backend-staging',
-    environment: 'staging',
-    application: 'backend',
-    ref: 'hotfix/security',
-    commitSha: mockCommits.hotfix.sha,
-  },
+    return {
+      name: `${instance.name}-${Math.random().toString(36).substring(2, 8)}-${Math.random().toString(36).substring(2, 7)}`,
+      environment: instance.environment,
+      application: instance.application,
+      ref: instance.ref,
+      commitSha: instance.commitSha,
+      ready,
+      phase,
+      createdTime: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
+      startedTime: started ? new Date(Date.now() - Math.random() * 6 * 24 * 60 * 60 * 1000).toISOString() : undefined,
+      started,
+      parents: [`${instance.type}/${instance.name}`],
+    }
+  })
+}
 
-  // Prod
-  {
-    type: InstanceTypeEnum.Deployment,
-    name: 'frontend-prod',
-    environment: 'prod',
-    application: 'frontend',
-    ref: 'main',
-    commitSha: mockCommits.main.sha,
-  },
-  {
-    type: InstanceTypeEnum.Deployment,
-    name: 'backend-prod',
-    environment: 'prod',
-    application: 'backend',
-    ref: 'main',
-    commitSha: mockCommits.main.sha,
-  },
-  {
-    type: InstanceTypeEnum.Deployment,
-    name: 'auth-prod',
-    environment: 'prod',
-    application: 'auth',
-    ref: 'main',
-    commitSha: mockCommits.main.sha,
-  },
-]
-
-// InstancePods - individual pods with different statuses
-export const mockInstancePods: InstancePod[] = [
-  // Frontend Dev - multiple pods, all running
-  {
-    name: 'frontend-dev-7d8f9c-abc12',
-    environment: 'dev',
-    application: 'frontend',
-    ref: 'develop',
-    commitSha: mockCommits.develop.sha,
-    ready: true,
-    phase: 'Running',
-    createdTime: '2025-01-15T08:00:00Z',
-    startedTime: '2025-01-15T08:01:30Z',
-    started: true,
-    parents: [],
-  },
-  {
-    name: 'frontend-dev-7d8f9c-def34',
-    environment: 'dev',
-    application: 'frontend',
-    ref: 'develop',
-    commitSha: mockCommits.develop.sha,
-    ready: true,
-    phase: 'Running',
-    createdTime: '2025-01-15T08:00:05Z',
-    startedTime: '2025-01-15T08:01:35Z',
-    started: true,
-    parents: [],
-  },
-
-  // Backend Dev - one pod running
-  {
-    name: 'backend-dev-5a6b7c-xyz89',
-    environment: 'dev',
-    application: 'backend',
-    ref: 'develop',
-    commitSha: mockCommits.develop.sha,
-    ready: true,
-    phase: 'Running',
-    createdTime: '2025-01-15T08:05:00Z',
-    startedTime: '2025-01-15T08:06:20Z',
-    started: true,
-    parents: [],
-  },
-
-  // Auth Dev - pod with issues (not ready)
-  {
-    name: 'auth-dev-3e4f5g-mnp56',
-    environment: 'dev',
-    application: 'auth',
-    ref: 'develop',
-    commitSha: mockCommits.develop.sha,
-    ready: false,
-    phase: 'Running',
-    createdTime: '2025-01-15T08:10:00Z',
-    startedTime: '2025-01-15T08:11:15Z',
-    started: true,
-    parents: [],
-  },
-
-  // Notifier Dev - pending pod
-  {
-    name: 'notifier-dev-9h8i7j-qrs78',
-    environment: 'dev',
-    application: 'notifier',
-    ref: 'feature/user-profile',
-    commitSha: mockCommits.feature1.sha,
-    ready: false,
-    phase: 'Pending',
-    createdTime: '2025-01-16T10:00:00Z',
-    started: false,
-    parents: [],
-  },
-
-  // QA Pods
-  {
-    name: 'frontend-qa-1a2b3c-uvw90',
-    environment: 'qa',
-    application: 'frontend',
-    ref: 'feature/user-profile',
-    commitSha: mockCommits.feature1.sha,
-    ready: true,
-    phase: 'Running',
-    createdTime: '2025-01-14T12:00:00Z',
-    startedTime: '2025-01-14T12:02:00Z',
-    started: true,
-    parents: [],
-  },
-  {
-    name: 'backend-qa-4d5e6f-jkl23',
-    environment: 'qa',
-    application: 'backend',
-    ref: 'develop',
-    commitSha: mockCommits.develop.sha,
-    ready: true,
-    phase: 'Running',
-    createdTime: '2025-01-14T12:05:00Z',
-    startedTime: '2025-01-14T12:06:30Z',
-    started: true,
-    parents: [],
-  },
-
-  // Staging Pods
-  {
-    name: 'frontend-staging-7g8h9i-mno45',
-    environment: 'staging',
-    application: 'frontend',
-    ref: 'main',
-    commitSha: mockCommits.main.sha,
-    ready: true,
-    phase: 'Running',
-    createdTime: '2025-01-13T14:00:00Z',
-    startedTime: '2025-01-13T14:02:15Z',
-    started: true,
-    parents: [],
-  },
-  {
-    name: 'backend-staging-0a1b2c-pqr67',
-    environment: 'staging',
-    application: 'backend',
-    ref: 'hotfix/security',
-    commitSha: mockCommits.hotfix.sha,
-    ready: true,
-    phase: 'Running',
-    createdTime: '2025-01-16T15:00:00Z',
-    startedTime: '2025-01-16T15:01:45Z',
-    started: true,
-    parents: [],
-  },
-
-  // Prod Pods - multiple replicas
-  {
-    name: 'frontend-prod-3d4e5f-stu89',
-    environment: 'prod',
-    application: 'frontend',
-    ref: 'main',
-    commitSha: mockCommits.main.sha,
-    ready: true,
-    phase: 'Running',
-    createdTime: '2025-01-10T10:00:00Z',
-    startedTime: '2025-01-10T10:02:30Z',
-    started: true,
-    parents: [],
-  },
-  {
-    name: 'frontend-prod-3d4e5f-vwx01',
-    environment: 'prod',
-    application: 'frontend',
-    ref: 'main',
-    commitSha: mockCommits.main.sha,
-    ready: true,
-    phase: 'Running',
-    createdTime: '2025-01-10T10:00:02Z',
-    startedTime: '2025-01-10T10:02:32Z',
-    started: true,
-    parents: [],
-  },
-  {
-    name: 'frontend-prod-3d4e5f-yza23',
-    environment: 'prod',
-    application: 'frontend',
-    ref: 'main',
-    commitSha: mockCommits.main.sha,
-    ready: true,
-    phase: 'Running',
-    createdTime: '2025-01-10T10:00:04Z',
-    startedTime: '2025-01-10T10:02:34Z',
-    started: true,
-    parents: [],
-  },
-  {
-    name: 'backend-prod-6g7h8i-bcd45',
-    environment: 'prod',
-    application: 'backend',
-    ref: 'main',
-    commitSha: mockCommits.main.sha,
-    ready: true,
-    phase: 'Running',
-    createdTime: '2025-01-10T10:05:00Z',
-    startedTime: '2025-01-10T10:06:45Z',
-    started: true,
-    parents: [],
-  },
-  {
-    name: 'backend-prod-6g7h8i-efg67',
-    environment: 'prod',
-    application: 'backend',
-    ref: 'main',
-    commitSha: mockCommits.main.sha,
-    ready: true,
-    phase: 'Running',
-    createdTime: '2025-01-10T10:05:02Z',
-    startedTime: '2025-01-10T10:06:47Z',
-    started: true,
-    parents: [],
-  },
-  {
-    name: 'auth-prod-9j0k1l-hij89',
-    environment: 'prod',
-    application: 'auth',
-    ref: 'main',
-    commitSha: mockCommits.main.sha,
-    ready: true,
-    phase: 'Running',
-    createdTime: '2025-01-10T10:10:00Z',
-    startedTime: '2025-01-10T10:11:30Z',
-    started: true,
-    parents: [],
-  },
-]
+export const mockInstancePods: InstancePod[] = mockInstances.flatMap((instance) => {
+  // Prod has 2-3 replicas, others have 1-2
+  const podCount = instance.environment.startsWith('prod') ? Math.floor(Math.random() * 2) + 2 : Math.floor(Math.random() * 2) + 1
+  return generatePodsForInstance(instance, podCount)
+})
 
 // Credentials Secrets
 export const mockCredentialsSecrets: CredentialsSecretListItem[] = [

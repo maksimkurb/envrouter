@@ -1,24 +1,24 @@
 import { useEffect, useState } from 'react'
 import { Application, Commit, DefaultApiFp, Instance, InstancePod, Ref } from '@/axios'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Loader2 } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { useToast } from '@/hooks/use-toast'
 
 interface PodDetailsDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
   instance: Instance
   instancePods: InstancePod[]
   application: Application
   refsHeads: Ref[]
+  children: React.ReactNode
 }
 
 const api = DefaultApiFp()
@@ -46,7 +46,8 @@ function PodDetailsCard({ pod, application }: { pod: InstancePod; application: A
           })
         })
     }
-  }, [pod.commitSha, application.repositoryName, toast])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pod.commitSha, application.repositoryName])
 
   const rows: Array<{ key: string; value: React.ReactNode }> = [
     { key: 'Pod name', value: pod.name },
@@ -101,26 +102,28 @@ function PodDetailsCard({ pod, application }: { pod: InstancePod; application: A
 }
 
 export default function PodDetailsDialog({
-  open,
-  onOpenChange,
   instance,
   instancePods,
   application,
+  children,
 }: PodDetailsDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>
+    <Sheet>
+      {children}
+      <SheetContent side="right" className="sm:max-w-3xl px-6">
+        <SheetHeader className="px-0">
+          <SheetTitle>
             {instance.name}.{instance.environment}: {instancePods.length}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="bg-background">
-          {instancePods.map((pod) => (
-            <PodDetailsCard key={pod.name} pod={pod} application={application} />
-          ))}
-        </div>
-      </DialogContent>
-    </Dialog>
+          </SheetTitle>
+        </SheetHeader>
+        <ScrollArea className="h-[calc(100vh-100px)] mt-6 -mx-6 px-6">
+          <div className="bg-background">
+            {instancePods.map((pod) => (
+              <PodDetailsCard key={pod.name} pod={pod} application={application} />
+            ))}
+          </div>
+        </ScrollArea>
+      </SheetContent>
+    </Sheet>
   )
 }

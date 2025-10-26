@@ -1,6 +1,6 @@
-import { useState } from 'react'
 import { Application, Instance, InstancePod, Ref } from '@/axios'
 import { Badge } from '@/components/ui/badge'
+import { SheetTrigger } from '@/components/ui/sheet'
 import PodDetailsDialog from './PodDetailsDialog'
 
 interface InstanceBadgeProps {
@@ -11,21 +11,18 @@ interface InstanceBadgeProps {
 }
 
 export default function InstanceBadge({ application, instance, instancePods, refsHeads }: InstanceBadgeProps) {
-  const [open, setOpen] = useState(false)
-
   return (
-    <>
-      <Badge variant="outline" className="cursor-pointer" onClick={() => setOpen(true)}>
-        {instance.name}: {instancePods.length}, {instance.ref}
-      </Badge>
-      <PodDetailsDialog
-        open={open}
-        onOpenChange={setOpen}
-        instance={instance}
-        instancePods={instancePods}
-        application={application}
-        refsHeads={refsHeads}
-      />
-    </>
+    <PodDetailsDialog
+      instance={instance}
+      instancePods={instancePods}
+      application={application}
+      refsHeads={refsHeads}
+    >
+      <SheetTrigger asChild>
+        <Badge variant="outline" className="cursor-pointer">
+          {instance.name}: {instancePods.length}, {instance.ref}
+        </Badge>
+      </SheetTrigger>
+    </PodDetailsDialog>
   )
 }
