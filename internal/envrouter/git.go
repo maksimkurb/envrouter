@@ -37,13 +37,19 @@ func NewGitClient(
 	}
 }
 
-func (g *gitClient) getRepository(repositoryName string) (*git.Repository, error) {
+func (g *gitClient) getRepository(repositoryName string) (r *git.Repository, err error) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			err = fmt.Errorf("panic during git operation for %s: %v", repositoryName, rec)
+			log.Errorf("Recovered from panic in getRepository(%s): %v", repositoryName, rec)
+		}
+	}()
+
 	options, err := g.getGitOptions(repositoryName)
 	if err != nil {
 		return nil, err
 	}
 	path := fmt.Sprintf("/tmp/git/%s", repositoryName)
-	var r *git.Repository
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		r, err = git.PlainClone(path, true, options)
 		if err != nil {
