@@ -6,6 +6,7 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
 )
 
 type ConfigMapDataStorage interface {
@@ -36,47 +37,57 @@ func NewConfigMapDataStorage(
 	}
 }
 
+// retryOnWriteConflict retries read-modify-write races: 409 Conflict on
+// Update and AlreadyExists when two first-ever saves both take the Create path.
+func retryOnWriteConflict(fn func() error) error {
+	return retry.OnError(retry.DefaultRetry, func(err error) bool {
+		return k8serrors.IsConflict(err) || k8serrors.IsAlreadyExists(err)
+	}, fn)
+}
+
 func (d *configMapDataStorage) Save(key string, data string) error {
-	var err error
 	clientset, _, err := d.client.getK8sClient()
 	if err != nil {
-		return nil
+		return err
 	}
-	var new bool
-	configmap, err := clientset.CoreV1().ConfigMaps(d.namespace).Get(d.ctx, d.resourceName, metav1.GetOptions{})
-	if err != nil {
-		if !k8serrors.IsNotFound(err) {
-			return err
+	return retryOnWriteConflict(func() error {
+		var new bool
+		configmap, err := clientset.CoreV1().ConfigMaps(d.namespace).Get(d.ctx, d.resourceName, metav1.GetOptions{})
+		if err != nil {
+			if !k8serrors.IsNotFound(err) {
+				return err
+			}
+			new = true
 		}
-		new = true
-	}
-	if new {
-		configmap = &apiv1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      d.resourceName,
-				Namespace: d.namespace,
-			},
+		if new {
+			configmap = &apiv1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      d.resourceName,
+					Namespace: d.namespace,
+				},
+			}
 		}
-		configmap.Data = make(map[string]string)
-	}
-	if configmap.Data == nil {
-		configmap.Data = make(map[string]string)
-	}
+		if configmap.Data == nil {
+			configmap.Data = make(map[string]string)
+		}
 
-	configmap.Data[key] = data
+		configmap.Data[key] = data
 
-	if new {
-		_, err = clientset.CoreV1().ConfigMaps(d.namespace).Create(d.ctx, configmap, metav1.CreateOptions{})
-	} else {
-		_, err = clientset.CoreV1().ConfigMaps(d.namespace).Update(d.ctx, configmap, metav1.UpdateOptions{})
-	}
+		if new {
+			_, err = clientset.CoreV1().ConfigMaps(d.namespace).Create(d.ctx, configmap, metav1.CreateOptions{})
+		} else {
+			_, err = clientset.CoreV1().ConfigMaps(d.namespace).Update(d.ctx, configmap, metav1.UpdateOptions{})
+		}
 
-	return err
+		return err
+	})
 }
 
 func (d *configMapDataStorage) GetAll() (map[string]string, error) {
-	var err error
 	clientset, _, err := d.client.getK8sClient()
+	if err != nil {
+		return nil, err
+	}
 	configmap, err := clientset.CoreV1().ConfigMaps(d.namespace).Get(d.ctx, d.resourceName, metav1.GetOptions{})
 	if err != nil {
 		if !k8serrors.IsNotFound(err) {
@@ -99,19 +110,23 @@ func (d *configMapDataStorage) GetByKey(key string) (string, error) {
 }
 
 func (d *configMapDataStorage) DeleteByKey(key string) error {
-	var err error
 	clientset, _, err := d.client.getK8sClient()
-	configmap, err := clientset.CoreV1().ConfigMaps(d.namespace).Get(d.ctx, d.resourceName, metav1.GetOptions{})
 	if err != nil {
-		if !k8serrors.IsNotFound(err) {
+		return err
+	}
+	return retryOnWriteConflict(func() error {
+		configmap, err := clientset.CoreV1().ConfigMaps(d.namespace).Get(d.ctx, d.resourceName, metav1.GetOptions{})
+		if err != nil {
+			if !k8serrors.IsNotFound(err) {
+				return err
+			}
+			return nil
+		}
+		if _, ok := configmap.Data[key]; ok {
+			delete(configmap.Data, key)
+			_, err = clientset.CoreV1().ConfigMaps(d.namespace).Update(d.ctx, configmap, metav1.UpdateOptions{})
 			return err
 		}
 		return nil
-	}
-	if _, ok := configmap.Data[key]; ok {
-		delete(configmap.Data, key)
-		_, err = clientset.CoreV1().ConfigMaps(d.namespace).Update(d.ctx, configmap, metav1.UpdateOptions{})
-		return err
-	}
-	return nil
+	})
 }

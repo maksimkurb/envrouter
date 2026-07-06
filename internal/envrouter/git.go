@@ -1,6 +1,7 @@
 package envrouter
 
 import (
+	"errors"
 	"fmt"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -11,6 +12,7 @@ import (
 	"gitlab.com/jonasasx/envrouter/internal/utils"
 	"os"
 	"reflect"
+	"sync"
 
 	cryptossh "golang.org/x/crypto/ssh"
 	"strings"
@@ -25,6 +27,8 @@ type GitClient interface {
 type gitClient struct {
 	repositoryService        RepositoryService
 	credentialsSecretService CredentialsSecretService
+	mu                       sync.Mutex
+	repoLocks                map[string]*sync.Mutex
 }
 
 func NewGitClient(
@@ -32,9 +36,23 @@ func NewGitClient(
 	credentialsSecretService CredentialsSecretService,
 ) GitClient {
 	return &gitClient{
-		repositoryService,
-		credentialsSecretService,
+		repositoryService:        repositoryService,
+		credentialsSecretService: credentialsSecretService,
+		repoLocks:                map[string]*sync.Mutex{},
 	}
+}
+
+// lockRepository serializes all on-disk access to a single repository:
+// go-git's filesystem storage is not safe under concurrent clone/fetch/read.
+func (g *gitClient) lockRepository(repositoryName string) *sync.Mutex {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	l, ok := g.repoLocks[repositoryName]
+	if !ok {
+		l = &sync.Mutex{}
+		g.repoLocks[repositoryName] = l
+	}
+	return l
 }
 
 func (g *gitClient) getRepository(repositoryName string) (r *git.Repository, err error) {
@@ -62,15 +80,18 @@ func (g *gitClient) getRepository(repositoryName string) (r *git.Repository, err
 			return nil, err
 		}
 		err = r.Fetch(&git.FetchOptions{RemoteName: "origin", Auth: options.Auth, Progress: options.Progress})
-		if err != nil && fmt.Sprint(err) != "already up-to-date" {
+		if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 			return nil, err
 		}
 		log.Debugf("Fetched %s", repositoryName)
 	}
-	return r, err
+	return r, nil
 }
 
 func (g *gitClient) GetCommitByHash(repositoryName string, hash string) (*api.Commit, error) {
+	lock := g.lockRepository(repositoryName)
+	lock.Lock()
+	defer lock.Unlock()
 	r, err := g.getRepository(repositoryName)
 	if err != nil {
 		return nil, err
@@ -93,11 +114,17 @@ func (g *gitClient) getCommitByHash(repository *git.Repository, hash plumbing.Ha
 }
 
 func (g *gitClient) SupplyRefsHeads(repositoryName string, supplier func(ref string, commit *api.Commit)) error {
+	lock := g.lockRepository(repositoryName)
+	lock.Lock()
+	defer lock.Unlock()
 	r, err := g.getRepository(repositoryName)
 	if err != nil {
 		return err
 	}
 	iter, err := r.References()
+	if err != nil {
+		return err
+	}
 	err = iter.ForEach(func(ref *plumbing.Reference) error {
 		if strings.HasPrefix(string(ref.Name()), "refs/remotes/origin/") {
 			refName := strings.Replace(ref.Name().Short(), "origin/", "", 1)
@@ -161,6 +188,7 @@ type GitStorage interface {
 type gitStorage struct {
 	gitClient      GitClient
 	eventsObserver utils.Observer
+	mu             sync.RWMutex
 	commits        map[string]*api.Commit
 	branches       map[string]map[string]*api.Commit
 }
@@ -178,6 +206,8 @@ func NewGitStorage(
 }
 
 func (g *gitStorage) GetAllRefsHeads() ([]*api.Ref, error) {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
 	result := []*api.Ref{}
 	for repositoryName, v := range g.branches {
 		for ref, commit := range v {
@@ -192,7 +222,10 @@ func (g *gitStorage) GetAllRefsHeads() ([]*api.Ref, error) {
 }
 
 func (g *gitStorage) GetCommitByHash(repositoryName string, hash string) (*api.Commit, error) {
-	if commit, ok := g.commits[hash]; ok {
+	g.mu.RLock()
+	commit, ok := g.commits[hash]
+	g.mu.RUnlock()
+	if ok {
 		return commit, nil
 	}
 	commit, err := g.gitClient.GetCommitByHash(repositoryName, hash)
@@ -200,18 +233,31 @@ func (g *gitStorage) GetCommitByHash(repositoryName string, hash string) (*api.C
 		return nil, err
 	}
 	if commit != nil {
+		g.mu.Lock()
+		// ponytail: crude cap instead of LRU; the map only grows on cache
+		// misses for commits outside branch heads, so a reset is cheap
+		if len(g.commits) > 10000 {
+			g.commits = map[string]*api.Commit{}
+		}
 		g.commits[hash] = commit
+		g.mu.Unlock()
 	}
 	return commit, nil
 }
 
 func (g *gitStorage) addRefHeadCommit(repositoryName string, ref string, commit *api.Commit) {
+	g.mu.Lock()
 	g.commits[commit.Sha] = commit
 	if _, ok := g.branches[repositoryName]; !ok {
 		g.branches[repositoryName] = map[string]*api.Commit{}
 	}
-	if oldCommit, ok := g.branches[repositoryName][ref]; !ok || !reflect.DeepEqual(oldCommit, commit) {
+	oldCommit, ok := g.branches[repositoryName][ref]
+	changed := !ok || !reflect.DeepEqual(oldCommit, commit)
+	if changed {
 		g.branches[repositoryName][ref] = commit
+	}
+	g.mu.Unlock()
+	if changed {
 		g.eventsObserver.Publish(nil, api.SSEvent{
 			ItemType: "RefHead",
 			Item: api.Ref{
@@ -225,11 +271,34 @@ func (g *gitStorage) addRefHeadCommit(repositoryName string, ref string, commit 
 }
 
 func (g *gitStorage) ScanRefsHeads(repositoryName string) error {
+	seen := map[string]bool{}
 	err := g.gitClient.SupplyRefsHeads(repositoryName, func(ref string, commit *api.Commit) {
+		seen[ref] = true
 		g.addRefHeadCommit(repositoryName, ref, commit)
 	})
 	if err != nil {
 		return err
+	}
+	// evict branches deleted upstream so the UI stops offering stale refs
+	g.mu.Lock()
+	var deleted []api.Ref
+	for ref, commit := range g.branches[repositoryName] {
+		if !seen[ref] {
+			deleted = append(deleted, api.Ref{
+				Repository: repositoryName,
+				Commit:     *commit,
+				Ref:        ref,
+			})
+			delete(g.branches[repositoryName], ref)
+		}
+	}
+	g.mu.Unlock()
+	for _, d := range deleted {
+		g.eventsObserver.Publish(nil, api.SSEvent{
+			ItemType: "RefHead",
+			Item:     d,
+			Event:    "DELETED",
+		})
 	}
 	return nil
 }

@@ -2,6 +2,7 @@ package envrouter
 
 import (
 	"github.com/stretchr/testify/assert"
+	"gitlab.com/jonasasx/envrouter/internal/envrouter/api"
 	"testing"
 )
 
@@ -29,9 +30,10 @@ func (d *dataStorageMock) DeleteByKey(key string) error {
 
 func TestRepository_Save(t *testing.T) {
 	service := NewRepositoryService(&dataStorageMock{})
-	repository := &Repository{}
-	err := service.Save(repository)
+	repository := &api.Repository{}
+	saved, err := service.Save(repository)
 	assert.Nil(t, err)
+	assert.Equal(t, repository, saved)
 }
 
 func TestRepository_FindByName(t *testing.T) {

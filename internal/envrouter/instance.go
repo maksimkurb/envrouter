@@ -24,7 +24,7 @@ func NewInstanceService(
 	service := &instanceService{
 		deploymentService,
 	}
-	handler := utils.ObserverEventHandlerFuncs{
+	handler := &utils.ObserverEventHandlerFuncs{
 		EventFunc: func(oldObj interface{}, newObj interface{}) {
 			if oldObj == nil && newObj != nil {
 				instance := service.mapInstance(newObj.(*v1.Deployment))

@@ -30,7 +30,7 @@ func NewReplicaSetService(
 	optionsModifier := func(options *metav1.ListOptions) {
 		options.LabelSelector = ApplicationLabelKey
 	}
-	watchlist := cache.NewFilteredListWatchFromClient(clientset.AppsV1().RESTClient(), "replicaSets", "", optionsModifier)
+	watchlist := cache.NewFilteredListWatchFromClient(clientset.AppsV1().RESTClient(), "replicasets", "", optionsModifier)
 	store, controller := cache.NewInformer(
 		watchlist,
 		&v1.ReplicaSet{},

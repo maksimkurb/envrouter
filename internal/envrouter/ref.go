@@ -5,6 +5,7 @@ import (
 	"github.com/ghodss/yaml"
 	"gitlab.com/jonasasx/envrouter/internal/envrouter/api"
 	"gitlab.com/jonasasx/envrouter/internal/envrouter/k8s"
+	"gitlab.com/jonasasx/envrouter/internal/utils"
 	"sort"
 )
 
@@ -18,6 +19,7 @@ type refService struct {
 	environmentService EnvironmentService
 	applicationService ApplicationService
 	deployService      DeployService
+	eventsObserver     utils.Observer
 }
 
 func NewRefService(
@@ -25,12 +27,14 @@ func NewRefService(
 	environmentService EnvironmentService,
 	applicationService ApplicationService,
 	deployService DeployService,
+	eventsObserver utils.Observer,
 ) RefService {
 	return &refService{
 		dataStorage,
 		environmentService,
 		applicationService,
 		deployService,
+		eventsObserver,
 	}
 }
 
@@ -49,6 +53,13 @@ func (r *refService) SaveBinding(refBinding *api.RefBinding) (*api.RefBinding, e
 	if err != nil {
 		return nil, err
 	}
+	// the binding is persisted at this point — tell every connected client,
+	// even if the deploy webhook below fails
+	r.eventsObserver.Publish(nil, api.SSEvent{
+		ItemType: "RefBinding",
+		Item:     refBinding,
+		Event:    "UPDATED",
+	})
 	err = r.deployService.Deploy(refBinding.Application, refBinding.Ref)
 	return refBinding, err
 }
@@ -102,7 +113,10 @@ func (r *refService) FindAllBindings(environmentFilter *string, applicationFilte
 		}
 	}
 	sort.Slice(result, func(i, j int) bool {
-		return result[i].Environment < result[j].Environment && result[i].Application < result[j].Application
+		if result[i].Environment != result[j].Environment {
+			return result[i].Environment < result[j].Environment
+		}
+		return result[i].Application < result[j].Application
 	})
 	return result, nil
 }

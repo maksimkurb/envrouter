@@ -28,7 +28,7 @@ func getConfig(context string) clientcmd.ClientConfig {
 func (c *client) GetK8sNamespace() (string, error) {
 	namespace, _, err := c.clientConfig.Namespace()
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 
 	return namespace, nil
@@ -36,6 +36,9 @@ func (c *client) GetK8sNamespace() (string, error) {
 
 func (c *client) getK8sClient() (*kubernetes.Clientset, string, error) {
 	namespace, err := c.GetK8sNamespace()
+	if err != nil {
+		return nil, "", err
+	}
 
 	restConfig, err := c.clientConfig.ClientConfig()
 	if err != nil {

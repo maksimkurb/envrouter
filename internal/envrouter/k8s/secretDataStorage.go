@@ -35,45 +35,48 @@ func NewSecretDataStorage(
 	}
 }
 func (s *secretDataStorage) Save(key string, data map[string][]byte) error {
-	var err error
 	clientset, _, err := s.client.getK8sClient()
 	if err != nil {
-		return nil
+		return err
 	}
-	var new bool
-	secret, err := clientset.CoreV1().Secrets(s.namespace).Get(s.ctx, key, metav1.GetOptions{})
-	if err != nil {
-		if !k8serrors.IsNotFound(err) {
-			return err
+	return retryOnWriteConflict(func() error {
+		var new bool
+		secret, err := clientset.CoreV1().Secrets(s.namespace).Get(s.ctx, key, metav1.GetOptions{})
+		if err != nil {
+			if !k8serrors.IsNotFound(err) {
+				return err
+			}
+			new = true
 		}
-		new = true
-	}
-	if new {
-		secret = &apiv1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      key,
-				Namespace: s.namespace,
-				Labels: map[string]string{
-					SecretTypeLabelKey: s.secretTypeLabelValue,
+		if new {
+			secret = &apiv1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      key,
+					Namespace: s.namespace,
+					Labels: map[string]string{
+						SecretTypeLabelKey: s.secretTypeLabelValue,
+					},
 				},
-			},
+			}
 		}
-	}
 
-	secret.Data = data
+		secret.Data = data
 
-	if new {
-		_, err = clientset.CoreV1().Secrets(s.namespace).Create(s.ctx, secret, metav1.CreateOptions{})
-	} else {
-		_, err = clientset.CoreV1().Secrets(s.namespace).Update(s.ctx, secret, metav1.UpdateOptions{})
-	}
+		if new {
+			_, err = clientset.CoreV1().Secrets(s.namespace).Create(s.ctx, secret, metav1.CreateOptions{})
+		} else {
+			_, err = clientset.CoreV1().Secrets(s.namespace).Update(s.ctx, secret, metav1.UpdateOptions{})
+		}
 
-	return err
+		return err
+	})
 }
 
 func (s *secretDataStorage) ListByLabel() (map[string]map[string][]byte, error) {
-	var err error
 	clientset, _, err := s.client.getK8sClient()
+	if err != nil {
+		return nil, err
+	}
 	list, err := clientset.CoreV1().Secrets(s.namespace).List(s.ctx, metav1.ListOptions{LabelSelector: SecretTypeLabelKey + "=" + s.secretTypeLabelValue})
 	if err != nil {
 		return nil, err
@@ -86,8 +89,10 @@ func (s *secretDataStorage) ListByLabel() (map[string]map[string][]byte, error) 
 }
 
 func (s *secretDataStorage) GetByName(name string) (map[string][]byte, error) {
-	var err error
 	clientset, _, err := s.client.getK8sClient()
+	if err != nil {
+		return nil, err
+	}
 	item, err := clientset.CoreV1().Secrets(s.namespace).Get(s.ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
@@ -96,8 +101,9 @@ func (s *secretDataStorage) GetByName(name string) (map[string][]byte, error) {
 }
 
 func (s *secretDataStorage) DeleteByName(name string) error {
-	var err error
 	clientset, _, err := s.client.getK8sClient()
-	err = clientset.CoreV1().Secrets(s.namespace).Delete(s.ctx, name, metav1.DeleteOptions{})
-	return err
+	if err != nil {
+		return err
+	}
+	return clientset.CoreV1().Secrets(s.namespace).Delete(s.ctx, name, metav1.DeleteOptions{})
 }

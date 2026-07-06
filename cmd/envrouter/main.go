@@ -59,7 +59,7 @@ func main() {
 
 	deployService := envrouter.NewDeployService(applicationService, webhookService)
 
-	refService := envrouter.NewRefService(dataStorageFactory.NewRefBindingStorage(), environmentService, applicationService, deployService)
+	refService := envrouter.NewRefService(dataStorageFactory.NewRefBindingStorage(), environmentService, applicationService, deployService, eventsObserver)
 
 	gitClient := envrouter.NewGitClient(repositoryService, credentialsSecretService)
 
@@ -281,27 +281,73 @@ func (s *ServerInterfaceImpl) GetApiV1GitRefs(c *gin.Context) {
 }
 
 func (s *ServerInterfaceImpl) streamPods(c *gin.Context) {
-	subscriber := make(chan api.SSEvent)
+	// Buffered channel + non-blocking send: a slow or gone client drops
+	// events instead of blocking publishers (git scanner, k8s informers).
+	subscriber := make(chan api.SSEvent, 256)
 	handler := utils.ObserverEventHandlerFuncs{
 		EventFunc: func(oldObj interface{}, newObj interface{}) {
-			subscriber <- newObj.(api.SSEvent)
+			select {
+			case subscriber <- newObj.(api.SSEvent):
+			default:
+			}
 		},
 	}
 	s.eventsObserver.Subscribe(&handler)
 	defer s.eventsObserver.Unsubscribe(&handler)
 
-	go func() {
-		for {
-			subscriber <- api.SSEvent{
-				ItemType: "Ping",
-			}
-			time.Sleep(time.Second * 10)
-		}
+	// Snapshot is collected after Subscribe so a client can never miss an
+	// update that happened between its initial GETs and this subscription.
+	snapshot := s.collectSnapshot()
 
-	}()
+	ticker := time.NewTicker(time.Second * 10)
+	defer ticker.Stop()
 	c.Stream(func(w io.Writer) bool {
-		event := <-subscriber
-		c.SSEvent("", event)
+		if len(snapshot) > 0 {
+			c.SSEvent("", snapshot[0])
+			snapshot = snapshot[1:]
+			return true
+		}
+		select {
+		case event := <-subscriber:
+			c.SSEvent("", event)
+		case <-ticker.C:
+			c.SSEvent("", api.SSEvent{ItemType: "Ping"})
+		case <-c.Request.Context().Done():
+			return false
+		}
 		return true
 	})
+}
+
+func (s *ServerInterfaceImpl) collectSnapshot() []api.SSEvent {
+	var events []api.SSEvent
+	if instances, err := s.instanceService.FindAll(); err == nil {
+		for _, v := range instances {
+			events = append(events, api.SSEvent{ItemType: "Instance", Item: v, Event: "UPDATED"})
+		}
+	} else {
+		log.Errorf("SSE snapshot: instances: %v", err)
+	}
+	if pods, err := s.instancePodService.FindAll(); err == nil {
+		for _, v := range pods {
+			events = append(events, api.SSEvent{ItemType: "InstancePod", Item: v, Event: "UPDATED"})
+		}
+	} else {
+		log.Errorf("SSE snapshot: instance pods: %v", err)
+	}
+	if refs, err := s.gitStorage.GetAllRefsHeads(); err == nil {
+		for _, v := range refs {
+			events = append(events, api.SSEvent{ItemType: "RefHead", Item: v, Event: "UPDATED"})
+		}
+	} else {
+		log.Errorf("SSE snapshot: refs: %v", err)
+	}
+	if bindings, err := s.refService.FindAllBindings(nil, nil, nil); err == nil {
+		for _, v := range bindings {
+			events = append(events, api.SSEvent{ItemType: "RefBinding", Item: v, Event: "UPDATED"})
+		}
+	} else {
+		log.Errorf("SSE snapshot: ref bindings: %v", err)
+	}
+	return events
 }

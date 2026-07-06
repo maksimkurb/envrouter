@@ -1,5 +1,7 @@
 package utils
 
+import "sync"
+
 type Observer interface {
 	Subscribe(h ObserverEventHandler)
 	Unsubscribe(h ObserverEventHandler)
@@ -7,6 +9,7 @@ type Observer interface {
 }
 
 type observer struct {
+	mu       sync.RWMutex
 	handlers []ObserverEventHandler
 }
 
@@ -15,10 +18,14 @@ func NewObserver() Observer {
 }
 
 func (o *observer) Subscribe(h ObserverEventHandler) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
 	o.handlers = append(o.handlers, h)
 }
 
 func (o *observer) Unsubscribe(h ObserverEventHandler) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
 	for i, v := range o.handlers {
 		if h == v {
 			o.handlers = append(o.handlers[:i], o.handlers[i+1:]...)
@@ -28,7 +35,11 @@ func (o *observer) Unsubscribe(h ObserverEventHandler) {
 }
 
 func (o *observer) Publish(oldObj interface{}, newObj interface{}) {
-	for _, s := range o.handlers {
+	o.mu.RLock()
+	handlers := make([]ObserverEventHandler, len(o.handlers))
+	copy(handlers, o.handlers)
+	o.mu.RUnlock()
+	for _, s := range handlers {
 		s.OnEvent(oldObj, newObj)
 	}
 }

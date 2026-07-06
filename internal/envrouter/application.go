@@ -85,10 +85,11 @@ func (a *applicationService) FindByName(name string) (*api.Application, error) {
 	if application == nil {
 		deployments := a.deploymentService.GetAll()
 		for _, v := range deployments {
-			if applicationName, ok := v.Labels[k8s.ApplicationLabelKey]; ok {
+			if applicationName, ok := v.Labels[k8s.ApplicationLabelKey]; ok && applicationName == name {
 				application = &api.Application{
-					Name: applicationName,
+					Name: name,
 				}
+				break
 			}
 		}
 	}

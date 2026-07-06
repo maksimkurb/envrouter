@@ -1,6 +1,7 @@
 package envrouter
 
 import (
+	log "github.com/sirupsen/logrus"
 	"gitlab.com/jonasasx/envrouter/internal/envrouter/api"
 	"gitlab.com/jonasasx/envrouter/internal/envrouter/k8s"
 	"gitlab.com/jonasasx/envrouter/internal/utils"
@@ -27,27 +28,18 @@ func NewInstancePodService(
 		podService,
 		parentService,
 	}
-	handler := utils.ObserverEventHandlerFuncs{
+	handler := &utils.ObserverEventHandlerFuncs{
 		EventFunc: func(oldObj interface{}, newObj interface{}) {
 			if oldObj == nil && newObj != nil {
-				pod, err := service.mapInstancePod(newObj.(*v1.Pod))
-				if err != nil {
-					return
-				}
+				pod := service.mapInstancePod(newObj.(*v1.Pod))
 				instancePodObserver.Publish(nil, api.SSEvent{
 					ItemType: "InstancePod",
 					Item:     pod,
 					Event:    "UPDATED",
 				})
 			} else if oldObj != nil && newObj != nil {
-				oldPod, err := service.mapInstancePod(oldObj.(*v1.Pod))
-				if err != nil {
-					return
-				}
-				newPod, err := service.mapInstancePod(newObj.(*v1.Pod))
-				if err != nil {
-					return
-				}
+				oldPod := service.mapInstancePod(oldObj.(*v1.Pod))
+				newPod := service.mapInstancePod(newObj.(*v1.Pod))
 				if !reflect.DeepEqual(oldPod, newPod) {
 					instancePodObserver.Publish(nil, api.SSEvent{
 						ItemType: "InstancePod",
@@ -56,10 +48,7 @@ func NewInstancePodService(
 					})
 				}
 			} else if oldObj != nil && newObj == nil {
-				pod, err := service.mapInstancePod(oldObj.(*v1.Pod))
-				if err != nil {
-					return
-				}
+				pod := service.mapInstancePod(oldObj.(*v1.Pod))
 				instancePodObserver.Publish(nil, api.SSEvent{
 					ItemType: "InstancePod",
 					Item:     pod,
@@ -81,16 +70,12 @@ func (i *instancePodService) FindAll() ([]*api.InstancePod, error) {
 	pods := i.podService.GetAll()
 	var result []*api.InstancePod
 	for _, v := range pods {
-		instancePod, err := i.mapInstancePod(v)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, instancePod)
+		result = append(result, i.mapInstancePod(v))
 	}
 	return result, nil
 }
 
-func (i *instancePodService) mapInstancePod(pod *v1.Pod) (*api.InstancePod, error) {
+func (i *instancePodService) mapInstancePod(pod *v1.Pod) *api.InstancePod {
 	started := true
 	ready := true
 	var startTime *string
@@ -106,7 +91,9 @@ func (i *instancePodService) mapInstancePod(pod *v1.Pod) (*api.InstancePod, erro
 	commitSha := pod.Annotations[k8s.ShaAnnotationKey]
 	parents, err := i.parentService.GetPodParents(pod)
 	if err != nil {
-		return nil, err
+		// parents are informative only — never drop a pod event (especially
+		// DELETED, which a resync would not repair) because of them
+		log.Errorf("Failed to resolve parents for pod %s/%s: %v", pod.Namespace, pod.Name, err)
 	}
 	var environment string
 	if env, ok := pod.Labels[k8s.EnvironmentLabelKey]; ok {
@@ -126,5 +113,5 @@ func (i *instancePodService) mapInstancePod(pod *v1.Pod) (*api.InstancePod, erro
 		Started:     started,
 		StartedTime: startTime,
 		Parents:     &parents,
-	}, err
+	}
 }
