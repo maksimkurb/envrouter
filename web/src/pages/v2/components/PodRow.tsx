@@ -211,7 +211,7 @@ export function PodRow({ pod, application }: { pod: InstancePod; application: Ap
         </div>
       </TableCell>
       <TableCell>
-        <div className="text-xs font-mono">
+        <div className="flex items-center text-xs font-mono">
           {pod.ref || '—'}
           {shortSha && (
             <button
@@ -224,18 +224,20 @@ export function PodRow({ pod, application }: { pod: InstancePod; application: Ap
               {copied ? 'copied!' : shortSha}
             </button>
           )}
+          {loading && (
+            <Loader2
+              aria-label="Loading commit info"
+              className="ml-2 h-3 w-3 animate-spin text-muted-foreground"
+            />
+          )}
         </div>
-        {loading ? (
-          <Loader2 aria-label="Loading commit info" className="mt-0.5 h-3 w-3 animate-spin text-muted-foreground" />
-        ) : (
-          commit && (
-            <div
-              className="mt-0.5 max-w-md truncate text-xs text-muted-foreground"
-              title={`${commit.author}: ${commit.message}`}
-            >
-              {commit.author} — {commit.message}
-            </div>
-          )
+        {!loading && commit && (
+          <div
+            className="mt-0.5 max-w-md truncate text-xs text-muted-foreground"
+            title={`${commit.author}: ${commit.message}`}
+          >
+            {commit.author} — {commit.message}
+          </div>
         )}
       </TableCell>
       <TableCell>
