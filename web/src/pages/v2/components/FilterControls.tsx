@@ -44,6 +44,7 @@ export function FilterControls({
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Service filter"
+            aria-label="Filter by service name"
             value={serviceSearchQuery}
             onChange={(e) => onServiceSearchChange(e.target.value)}
             className="pl-9"
@@ -55,6 +56,7 @@ export function FilterControls({
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Branch filter"
+            aria-label="Filter by branch"
             value={branchSearchQuery}
             onChange={(e) => onBranchSearchChange(e.target.value)}
             className="pl-9"
@@ -87,11 +89,11 @@ export function FilterControls({
         </DropdownMenu>
       </div>
       <div className="flex gap-2 ml-auto">
-        <Button variant="outline" size="sm" onClick={onExpandAll} title="Expand All">
-          <ListChevronsUpDown />
+        <Button variant="outline" size="sm" onClick={onExpandAll} title="Expand All" aria-label="Expand all environments">
+          <ListChevronsUpDown aria-hidden="true" />
         </Button>
-        <Button variant="outline" size="sm" onClick={onCollapseAll} title="Collapse All">
-          <ListChevronsDownUp />
+        <Button variant="outline" size="sm" onClick={onCollapseAll} title="Collapse All" aria-label="Collapse all environments">
+          <ListChevronsDownUp aria-hidden="true" />
         </Button>
       </div>
     </div>

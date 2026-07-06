@@ -11,6 +11,8 @@ interface InstanceBadgeProps {
 }
 
 export default function InstanceBadge({ application, instance, instancePods, refsHeads }: InstanceBadgeProps) {
+  const podCount = instancePods.length
+  const summary = `${instance.name}: ${podCount} ${podCount === 1 ? 'pod' : 'pods'} on ${instance.ref || 'unknown ref'}`
   return (
     <PodDetailsDialog
       instance={instance}
@@ -19,8 +21,10 @@ export default function InstanceBadge({ application, instance, instancePods, ref
       refsHeads={refsHeads}
     >
       <SheetTrigger asChild>
-        <Badge variant="outline" className="cursor-pointer">
-          {instance.name}: {instancePods.length}, {instance.ref}
+        <Badge asChild variant="outline" className="cursor-pointer">
+          <button type="button" title={`${summary} — click for pod details`} aria-label={`${summary} — show pod details`}>
+            {instance.name}: {podCount}, {instance.ref}
+          </button>
         </Badge>
       </SheetTrigger>
     </PodDetailsDialog>

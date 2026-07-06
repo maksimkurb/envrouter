@@ -1,66 +1,80 @@
-import { useEffect, useState } from 'react'
+import React, { memo, useEffect, useState } from 'react'
 import { Application, DefaultApiFp, Instance, InstancePod, Ref, RefBinding } from '@/axios'
 import { TableCell, TableRow } from '@/components/ui/table'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Loader2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import InstanceBadge from './InstanceBadge'
 import { refExists, isInstanceDeploying } from '@/lib/instanceUtils'
 
 interface ServiceRowProps {
+  environmentName: string
   application: Application
   refBinding: RefBinding | undefined
   instances: Instance[]
   instancePods: InstancePod[]
   refsHeads: Ref[]
   onRefBindingChanged: (refBinding: RefBinding) => void
-  toast: ReturnType<typeof useToast>['toast']
 }
 
 const api = DefaultApiFp()
 
-export function ServiceRow({
+export const ServiceRow = memo(function ServiceRow({
+  environmentName,
   application,
   refBinding,
   instances,
   instancePods,
   refsHeads,
   onRefBindingChanged,
-  toast,
 }: ServiceRowProps) {
+  const { toast } = useToast()
   const [ref, setRef] = useState(refBinding?.ref || '')
+  const [editing, setEditing] = useState(false)
 
-  // Sync local state with prop changes
+  // Sync local state with prop changes, but never clobber the input mid-edit
   useEffect(() => {
-    setRef(refBinding?.ref || '')
-  }, [refBinding?.ref])
-
-  const onRefChanged = (newRef: string) => {
-    if (refBinding && refBinding.ref !== newRef) {
-      const newRefBinding = { ...refBinding, ref: newRef } as RefBinding
-      api
-        .apiV1RefBindingsPost(newRefBinding)
-        .then((request) => request())
-        .then((response) => {
-          onRefBindingChanged(response.data)
-          toast({
-            title: 'Deployment initiated',
-            description: `Ref ${newRef} has been deployed to ${refBinding.environment} environment`,
-          })
-        })
-        .catch(() => {
-          toast({
-            title: 'Deployment failed',
-            description: `Ref ${newRef} could not be deployed to ${refBinding.environment} environment`,
-            variant: 'destructive',
-          })
-        })
+    if (!editing) {
+      setRef(refBinding?.ref || '')
     }
+  }, [refBinding?.ref, editing])
+
+  const boundRef = refBinding?.ref || ''
+
+  const commitRef = (newRef: string) => {
+    setEditing(false)
+    if (newRef === boundRef) return
+    const newRefBinding: RefBinding = refBinding
+      ? { ...refBinding, ref: newRef }
+      : { environment: environmentName, application: application.name, ref: newRef }
+    api
+      .apiV1RefBindingsPost(newRefBinding)
+      .then((request) => request())
+      .then((response) => {
+        onRefBindingChanged(response.data)
+        toast({
+          title: 'Deployment started',
+          description: `Deploying ref ${newRef} to ${environmentName} environment`,
+        })
+      })
+      .catch(() => {
+        setRef(boundRef)
+        toast({
+          title: 'Deployment failed',
+          description: `Ref ${newRef} could not be deployed to ${environmentName} environment`,
+          variant: 'destructive',
+        })
+      })
+  }
+
+  const revert = () => {
+    setEditing(false)
+    setRef(boundRef)
   }
 
   const deploying = isInstanceDeploying(refBinding, refsHeads, instancePods)
   const refIsValid = refExists(ref, refsHeads)
+  const errorId = `ref-error-${environmentName}-${application.name}`
 
   return (
     <TableRow>
@@ -73,18 +87,36 @@ export function ServiceRow({
           <div className="relative max-w-xs">
             <Input
               value={ref}
+              aria-label={`Target branch for ${application.name} in ${environmentName}`}
+              aria-invalid={!refIsValid && !!ref}
+              aria-describedby={!refIsValid && ref ? errorId : undefined}
+              onFocus={() => setEditing(true)}
               onChange={(e) => setRef(e.target.value)}
-              onBlur={(e) => onRefChanged(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  commitRef(e.currentTarget.value)
+                  e.currentTarget.blur()
+                } else if (e.key === 'Escape') {
+                  revert()
+                  e.currentTarget.blur()
+                }
+              }}
+              onBlur={revert}
               className={`h-8 text-sm ${!refIsValid && ref ? 'border-destructive' : ''}`}
             />
             {deploying && (
               <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <Loader2 aria-label="Deployment in progress" className="h-4 w-4 animate-spin text-muted-foreground" />
               </div>
             )}
           </div>
+          {editing && ref !== boundRef && (
+            <p className="text-xs text-muted-foreground">Press Enter to deploy, Escape to cancel</p>
+          )}
           {!refIsValid && ref && (
-            <Label className="text-xs text-destructive block">Ref does not exist</Label>
+            <p id={errorId} role="alert" className="text-xs text-destructive">
+              Ref does not exist
+            </p>
           )}
         </div>
       </TableCell>
@@ -105,4 +137,4 @@ export function ServiceRow({
       </TableCell>
     </TableRow>
   )
-}
+})

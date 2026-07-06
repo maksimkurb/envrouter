@@ -1,0 +1,15 @@
+import { Toaster as Sonner, ToasterProps } from 'sonner'
+
+function Toaster(props: ToasterProps) {
+  return (
+    <Sonner
+      className="toaster group"
+      richColors
+      closeButton
+      position="bottom-right"
+      {...props}
+    />
+  )
+}
+
+export { Toaster }

@@ -3,6 +3,7 @@ import { Application, Commit, DefaultApiFp, Instance, InstancePod, Ref } from '@
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
@@ -11,7 +12,6 @@ import { Badge } from '@/components/ui/badge'
 import { Loader2 } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { useToast } from '@/hooks/use-toast'
 
 interface PodDetailsDialogProps {
   instance: Instance
@@ -23,37 +23,60 @@ interface PodDetailsDialogProps {
 
 const api = DefaultApiFp()
 
+// Pods of one instance usually share a SHA — fetch each commit once.
+const commitCache = new Map<string, Promise<Commit>>()
+
+function getCommit(repositoryName: string, sha: string): Promise<Commit> {
+  const key = `${repositoryName}:${sha}`
+  let promise = commitCache.get(key)
+  if (!promise) {
+    promise = api
+      .apiV1GitRepositoriesRepositoryNameCommitsShaGet(sha, repositoryName)
+      .then((request) => request())
+      .then((response) => response.data)
+    promise.catch(() => commitCache.delete(key))
+    commitCache.set(key, promise)
+  }
+  return promise
+}
+
 function PodDetailsCard({ pod, application }: { pod: InstancePod; application: Application }) {
   const [loading, setLoading] = useState(false)
   const [commit, setCommit] = useState<Commit | undefined>(undefined)
-  const { toast } = useToast()
+  const [commitError, setCommitError] = useState(false)
 
   useEffect(() => {
     if (pod.commitSha && application.repositoryName) {
+      let cancelled = false
       setLoading(true)
-      api
-        .apiV1GitRepositoriesRepositoryNameCommitsShaGet(pod.commitSha, application.repositoryName)
-        .then((request) => request())
-        .then((response) => {
-          setCommit(response.data)
+      setCommitError(false)
+      getCommit(application.repositoryName, pod.commitSha)
+        .then((commit) => {
+          if (cancelled) return
+          setCommit(commit)
           setLoading(false)
         })
         .catch(() => {
+          if (cancelled) return
           setLoading(false)
-          toast({
-            title: 'Git fetching failed',
-            variant: 'destructive',
-          })
+          setCommitError(true)
         })
+      return () => {
+        cancelled = true
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pod.commitSha, application.repositoryName])
+
+  const commitValue = (value: React.ReactNode) => {
+    if (loading) return <Loader2 aria-label="Loading" className="h-4 w-4 animate-spin" />
+    if (commitError) return <span className="text-muted-foreground">unavailable</span>
+    return value
+  }
 
   const rows: Array<{ key: string; value: React.ReactNode }> = [
     { key: 'Pod name', value: pod.name },
     { key: 'Application', value: pod.application },
     { key: 'Environment', value: pod.environment },
-    { key: 'Shard', value: 's01' },
     {
       key: 'Status',
       value: (
@@ -66,22 +89,14 @@ function PodDetailsCard({ pod, application }: { pod: InstancePod; application: A
     { key: 'Started', value: pod.startedTime },
     { key: 'Branch', value: pod.ref || '-' },
     { key: 'Commit', value: pod.commitSha },
-    {
-      key: 'Author',
-      value: loading ? <Loader2 className="h-4 w-4 animate-spin" /> : commit?.author,
-    },
+    { key: 'Author', value: commitValue(commit?.author) },
     {
       key: 'Commit time',
-      value: loading ? (
-        <Loader2 className="h-4 w-4 animate-spin" />
-      ) : commit?.timestamp ? (
-        new Date(Date.parse(commit.timestamp)).toLocaleString()
-      ) : undefined,
+      value: commitValue(
+        commit?.timestamp ? new Date(Date.parse(commit.timestamp)).toLocaleString() : undefined
+      ),
     },
-    {
-      key: 'Commit Message',
-      value: loading ? <Loader2 className="h-4 w-4 animate-spin" /> : commit?.message,
-    },
+    { key: 'Commit Message', value: commitValue(commit?.message) },
   ]
 
   return (
@@ -113,8 +128,12 @@ export default function PodDetailsDialog({
       <SheetContent side="right" className="sm:max-w-3xl px-6">
         <SheetHeader className="px-0">
           <SheetTitle>
-            {instance.name}.{instance.environment}: {instancePods.length}
+            {instance.name} · {instance.environment} — {instancePods.length}{' '}
+            {instancePods.length === 1 ? 'pod' : 'pods'}
           </SheetTitle>
+          <SheetDescription>
+            Pod details for the {application.name} instance in the {instance.environment} environment.
+          </SheetDescription>
         </SheetHeader>
         <ScrollArea className="h-[calc(100vh-100px)] mt-6 -mx-6 px-6">
           <div className="bg-background">

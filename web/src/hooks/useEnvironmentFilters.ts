@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Application, Environment, RefBinding } from '@/axios'
 
+const EMPTY: Application[] = []
+
 export function useEnvironmentFilters(
   environments: Environment[],
   applications: Application[],
@@ -29,30 +31,41 @@ export function useEnvironmentFilters(
     })
   }, [environments, selectedEnvironments])
 
-  const filterApplicationsForEnv = useCallback(
-    (envName: string) => {
-      return applications.filter((app) => {
-        const refBinding = refBindings.get(`${envName}-${app.name}`)
-
-        if (serviceSearchQuery && !app.name.toLowerCase().includes(serviceSearchQuery.toLowerCase())) {
+  // One pass per data/filter change; render reads the map instead of
+  // re-filtering per environment per render.
+  const applicationsByEnv = useMemo(() => {
+    const result = new Map<string, Application[]>()
+    const serviceQuery = serviceSearchQuery.toLowerCase()
+    const branchQuery = branchSearchQuery.toLowerCase()
+    for (const env of filteredEnvironments) {
+      const apps = applications.filter((app) => {
+        if (serviceQuery && !app.name.toLowerCase().includes(serviceQuery)) {
           return false
         }
-
-        if (branchSearchQuery && !refBinding?.ref?.toLowerCase().includes(branchSearchQuery.toLowerCase())) {
-          return false
+        if (branchQuery) {
+          const refBinding = refBindings.get(`${env.name}-${app.name}`)
+          if (!refBinding?.ref?.toLowerCase().includes(branchQuery)) {
+            return false
+          }
         }
-
         return true
       })
-    },
-    [applications, refBindings, serviceSearchQuery, branchSearchQuery]
+      result.set(env.name, apps)
+    }
+    return result
+  }, [filteredEnvironments, applications, refBindings, serviceSearchQuery, branchSearchQuery])
+
+  const getApplicationsForEnv = useCallback(
+    (envName: string) => applicationsByEnv.get(envName) ?? EMPTY,
+    [applicationsByEnv]
   )
 
   const hasResults = useMemo(() => {
-    return filteredEnvironments.some((environment) => {
-      return filterApplicationsForEnv(environment.name).length > 0
-    })
-  }, [filteredEnvironments, filterApplicationsForEnv])
+    for (const apps of applicationsByEnv.values()) {
+      if (apps.length > 0) return true
+    }
+    return false
+  }, [applicationsByEnv])
 
   const selectedEnvNames = useMemo(() => {
     return Array.from(selectedEnvironments).sort().join(', ')
@@ -66,7 +79,7 @@ export function useEnvironmentFilters(
     setBranchSearchQuery,
     toggleEnvironmentFilter,
     filteredEnvironments,
-    filterApplicationsForEnv,
+    getApplicationsForEnv,
     hasResults,
     selectedEnvNames,
   }

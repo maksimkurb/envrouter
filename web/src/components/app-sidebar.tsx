@@ -1,4 +1,5 @@
 import * as React from "react"
+import { Link, useLocation } from "react-router-dom"
 import { Home, Folders } from "lucide-react"
 import {
   Sidebar,
@@ -11,7 +12,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 
-// Navigation data for EnvRouter
+// Navigation data for EnvRouter. Paths are relative to the /v2 router mount.
 const data = {
   navMain: [
     {
@@ -20,7 +21,7 @@ const data = {
       icon: Home,
     },
     {
-      title: "Repositories", 
+      title: "Repositories",
       url: "/v2/repo",
       icon: Folders,
     },
@@ -28,6 +29,7 @@ const data = {
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const { pathname } = useLocation()
   return (
     <Sidebar {...props}>
       <SidebarContent>
@@ -37,11 +39,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenu>
               {data.navMain.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <a href={item.url}>
+                  <SidebarMenuButton asChild isActive={pathname === item.url || pathname === `${item.url}/`}>
+                    <Link to={item.url}>
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
-                    </a>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}

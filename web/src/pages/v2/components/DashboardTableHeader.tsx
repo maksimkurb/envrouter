@@ -5,7 +5,9 @@ export function DashboardTableHeader() {
   return (
     <TableHeader>
       <TableRow>
-        <TableHead className="w-12"></TableHead>
+        <TableHead className="w-12">
+          <span className="sr-only">Expand</span>
+        </TableHead>
         <TableHead>Service</TableHead>
         <TableHead>Target Branch</TableHead>
         <TableHead>Pods</TableHead>
