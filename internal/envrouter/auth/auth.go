@@ -320,19 +320,14 @@ func (s *Service) CallbackHandler(c *gin.Context) {
 		c.String(http.StatusBadGateway, "identity provider returned no id_token")
 		return
 	}
-	actor, err := s.actorFromIDToken(c.Request.Context(), rawIDToken)
-	if err != nil {
+	if _, err := s.actorFromIDToken(c.Request.Context(), rawIDToken); err != nil {
 		log.Errorf("OIDC id_token rejected: %v", err)
 		c.String(http.StatusUnauthorized, "identity token rejected: %v", err)
 		return
 	}
-	if !s.CanView(actor) {
-		c.SetSameSite(http.SameSiteLaxMode)
-		c.SetCookie(sessionCookie, "", -1, "/", "", !s.cfg.InsecureCookie, true)
-		c.SetCookie(stateCookie, "", -1, "/", "", !s.cfg.InsecureCookie, true)
-		c.String(http.StatusForbidden, "your account is not in a group permitted to use EnvRouter")
-		return
-	}
+	// no CanView rejection here: the session is issued even for group-less
+	// users so the SPA can show its access-denied screen (userinfo reports
+	// canView=false); the API middleware 403s all their data requests
 	c.SetSameSite(http.SameSiteLaxMode)
 	// session cookie (no Max-Age): the ID token's own expiry is enforced on
 	// every request by the verifier
