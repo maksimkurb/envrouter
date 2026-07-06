@@ -24,7 +24,7 @@ function V2App() {
               <div className="flex flex-1 items-center justify-between">
                 <h1 className="text-lg font-semibold">EnvRouter</h1>
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" render={<Link to="/" />}>
+                  <Button variant="outline" nativeButton={false} render={<Link to="/" />}>
                     ← Back to v1 (MUI)
                   </Button>
                 </div>

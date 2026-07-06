@@ -50,15 +50,9 @@
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "@vitejs/plugin-react": "^5.0.4",
-    "msw": "^2.11.6",
     "shadcn": "^4.13.0",
     "tailwindcss": "^4.1.16",
     "typescript": "^5.9.3",
     "vite": "^7.1.12"
-  },
-  "msw": {
-    "workerDirectory": [
-      "public"
-    ]
   }
 }

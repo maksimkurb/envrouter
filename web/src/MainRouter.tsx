@@ -8,7 +8,7 @@ const V2App = React.lazy(() => import('./AppV2'));
 
 function MainRouter() {
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Suspense fallback={null}>
         <Routes>
           {/* V2 Routes (shadcn) - полностью отдельный интерфейс */}

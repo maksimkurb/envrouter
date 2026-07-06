@@ -89,7 +89,7 @@ export default function DashboardPage() {
     updateRefBinding,
     loading,
     error,
-    connected,
+    sseError,
     refetch,
   } = useDashboardData()
 
@@ -140,7 +140,7 @@ export default function DashboardPage() {
         onCollapseAll={collapseAll}
       />
 
-      {!connected && !loading && !error && (
+      {sseError && !loading && !error && (
         <div
           role="status"
           className="rounded-lg border border-yellow-500/50 bg-yellow-500/10 px-4 py-2 text-sm"

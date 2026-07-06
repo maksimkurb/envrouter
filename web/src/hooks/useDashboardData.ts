@@ -131,7 +131,7 @@ export function useDashboardData() {
   // The server replays a full state snapshot into every new SSE
   // subscription, so between fetchData() and that replay any wholesale
   // replacement here converges to current state.
-  const { connected } = useSSESubscription(onSSEvent, fetchData)
+  const { error: sseError } = useSSESubscription(onSSEvent, fetchData)
 
   useEffect(() => {
     fetchData()
@@ -147,7 +147,7 @@ export function useDashboardData() {
     updateRefBinding,
     loading,
     error,
-    connected,
+    sseError,
     refetch: fetchData,
   }
 }

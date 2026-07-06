@@ -17,6 +17,13 @@ export default defineConfig({
   server: {
     port: 3000,
     open: true,
+    // dev mode talks to a real envrouter backend (SSE included)
+    proxy: {
+      '/api': {
+        target: process.env.VITE_API_PROXY || 'http://localhost:8080',
+        changeOrigin: true,
+      },
+    },
   },
   build: {
     outDir: 'build',
