@@ -193,7 +193,7 @@ func securityHeaders() gin.HandlerFunc {
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "no-referrer")
-		h.Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'")
+		h.Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://www.gravatar.com; font-src 'self' data:; connect-src 'self'")
 		if hsts {
 			h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		}

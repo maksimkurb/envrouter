@@ -15,6 +15,8 @@ import {
   UserRound,
 } from "lucide-react"
 import { BASE_PATH } from "@/axios/base"
+import { Button } from "@/components/ui/button"
+import { useGravatar } from "@/lib/gravatar"
 import type { AuthInfo } from "@/hooks/useAuth"
 import {
   Sidebar,
@@ -108,7 +110,16 @@ function CollapseButton() {
   )
 }
 
+function accessMode(auth: AuthInfo): string {
+  if (auth.canConfigure) return "Administrator"
+  if (auth.canDeploy) return "Editor"
+  return "View only"
+}
+
+// Card with avatar + username + access mode + logout. Expanded-only: the
+// whole block (logout included) is hidden in the collapsed icon rail.
 function UserBlock({ auth }: { auth: AuthInfo }) {
+  const avatar = useGravatar(auth.email, 64)
   const logout = () => {
     axios.post(`${BASE_PATH}/auth/logout`).finally(() => {
       // the auth gate redirects to the login flow on reload
@@ -116,29 +127,34 @@ function UserBlock({ auth }: { auth: AuthInfo }) {
     })
   }
   return (
-    <>
-      <SidebarMenuItem>
-        <SidebarMenuButton
-          tooltip={auth.userIdentifier}
-          className="pointer-events-none"
-          aria-label={`Signed in as ${auth.userIdentifier}`}
+    <div className="mb-1 flex items-center gap-2 rounded-lg border bg-card p-2 group-data-[collapsible=icon]:hidden">
+      {avatar ? (
+        <img src={avatar} alt="" className="size-8 shrink-0 rounded-full bg-muted" />
+      ) : (
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
+          <UserRound className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+        </div>
+      )}
+      <div className="grid min-w-0 flex-1 text-left leading-tight">
+        <span
+          className="truncate text-sm font-medium"
+          title={[auth.fullName, auth.email].filter(Boolean).join(" · ") || auth.userIdentifier}
         >
-          <UserRound className="h-4 w-4" aria-hidden="true" />
-          <span
-            className="truncate"
-            title={[auth.fullName, auth.email].filter(Boolean).join(' · ') || undefined}
-          >
-            {auth.userIdentifier}
-          </span>
-        </SidebarMenuButton>
-      </SidebarMenuItem>
-      <SidebarMenuItem>
-        <SidebarMenuButton tooltip="Log out" onClick={logout} aria-label="Log out">
-          <LogOut className="h-4 w-4" aria-hidden="true" />
-          <span>Log out</span>
-        </SidebarMenuButton>
-      </SidebarMenuItem>
-    </>
+          {auth.userIdentifier}
+        </span>
+        <span className="truncate text-xs text-muted-foreground">{accessMode(auth)}</span>
+      </div>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        onClick={logout}
+        aria-label="Log out"
+        title="Log out"
+        className="shrink-0"
+      >
+        <LogOut className="h-4 w-4" aria-hidden="true" />
+      </Button>
+    </div>
   )
 }
 
@@ -191,8 +207,8 @@ export function AppSidebar({
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
+        {auth?.enabled && auth.authenticated && <UserBlock auth={auth} />}
         <SidebarMenu>
-          {auth?.enabled && auth.authenticated && <UserBlock auth={auth} />}
           <SidebarMenuItem>
             <ThemeSelector />
           </SidebarMenuItem>
