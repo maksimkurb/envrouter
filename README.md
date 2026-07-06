@@ -29,6 +29,33 @@ on each environment.
 
 Helm reference: https://github.com/jonasasx/envrouter-helm/blob/master/charts/envrouter/README.md
 
+## Authentication (optional, OIDC)
+
+EnvRouter can require login through any OIDC discovery-compliant provider
+(Keycloak, Authelia, …). Without configuration it runs open, as before.
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `ENVROUTER_OIDC_ISSUER` | *(empty = auth disabled)* | Issuer URL, e.g. `https://keycloak.example.com/realms/main` |
+| `ENVROUTER_OIDC_CLIENT_ID` | — | OAuth client id (required when issuer set) |
+| `ENVROUTER_OIDC_CLIENT_SECRET` | — | OAuth client secret |
+| `ENVROUTER_OIDC_REDIRECT_URL` | — | Public callback URL, e.g. `https://envrouter.example.com/auth/callback` (required when issuer set) |
+| `ENVROUTER_OIDC_SCOPES` | `openid profile email` | Requested scopes |
+| `ENVROUTER_OIDC_CLAIM_USER_IDENTIFIER` | `preferred_username,sub` | Comma-separated claim fallback list for the user identifier (required field; login is rejected if all claims are empty) |
+| `ENVROUTER_OIDC_CLAIM_FULLNAME` | `name` | Claim fallback list for the display name |
+| `ENVROUTER_OIDC_CLAIM_EMAIL` | `email` | Claim fallback list for the email |
+| `ENVROUTER_OIDC_INSECURE_COOKIE` | `false` | Set `true` for plain-HTTP dev setups |
+
+When auth is enabled every `/api/*` route requires a session (the UI redirects
+to the provider automatically). Every branch switch is recorded in an
+in-memory audit log (user, IP, old/new ref — kept until restart, visible via
+the history button next to each service's branch field), and deploy webhooks
+receive GitLab pipeline-trigger variables in the form body:
+`variables[ENVROUTER_OLD_REF]`, `variables[ENVROUTER_NEW_REF]`,
+`variables[ENVROUTER_TRIGGERED_BY_USERNAME]`,
+`variables[ENVROUTER_TRIGGERED_BY_FULLNAME]`,
+`variables[ENVROUTER_TRIGGERED_BY_IP]`.
+
 ## Usage
 
 Set label `envrouter.io/app=<your application name>` to `deployment.metadata.labels` and

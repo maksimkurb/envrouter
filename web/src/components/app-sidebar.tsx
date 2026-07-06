@@ -1,16 +1,21 @@
 import * as React from "react"
 import { Link, useLocation } from "react-router-dom"
 import { useTheme } from "next-themes"
+import axios from "axios"
 import {
   History,
   Home,
   Folders,
+  LogOut,
   Monitor,
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
   Sun,
+  UserRound,
 } from "lucide-react"
+import { BASE_PATH } from "@/axios/base"
+import type { AuthInfo } from "@/hooks/useAuth"
 import {
   Sidebar,
   SidebarContent,
@@ -103,7 +108,44 @@ function CollapseButton() {
   )
 }
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+function UserBlock({ auth }: { auth: AuthInfo }) {
+  const logout = () => {
+    axios.post(`${BASE_PATH}/auth/logout`).finally(() => {
+      // the auth gate redirects to the login flow on reload
+      window.location.reload()
+    })
+  }
+  return (
+    <>
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          tooltip={auth.userIdentifier}
+          className="pointer-events-none"
+          aria-label={`Signed in as ${auth.userIdentifier}`}
+        >
+          <UserRound className="h-4 w-4" aria-hidden="true" />
+          <span
+            className="truncate"
+            title={[auth.fullName, auth.email].filter(Boolean).join(' · ') || undefined}
+          >
+            {auth.userIdentifier}
+          </span>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+      <SidebarMenuItem>
+        <SidebarMenuButton tooltip="Log out" onClick={logout} aria-label="Log out">
+          <LogOut className="h-4 w-4" aria-hidden="true" />
+          <span>Log out</span>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    </>
+  )
+}
+
+export function AppSidebar({
+  auth,
+  ...props
+}: React.ComponentProps<typeof Sidebar> & { auth?: AuthInfo | null }) {
   const { pathname } = useLocation()
   return (
     <Sidebar {...props}>
@@ -150,6 +192,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>
+          {auth?.enabled && auth.authenticated && <UserBlock auth={auth} />}
           <SidebarMenuItem>
             <ThemeSelector />
           </SidebarMenuItem>

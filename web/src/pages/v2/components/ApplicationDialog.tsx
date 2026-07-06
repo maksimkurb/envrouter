@@ -109,9 +109,14 @@ export function ApplicationDialog({ application, repositories, onClose }: Applic
               aria-describedby="app-webhook-hint"
             />
             <p id="app-webhook-hint" className="text-xs text-muted-foreground">
-              Called with POST on every branch change. Substitutions:{' '}
+              Called with POST on every branch change. URL substitution:{' '}
               <code className="rounded bg-muted px-1 font-mono">{'{ref}'}</code> — the branch being
-              deployed.
+              deployed. The form body carries GitLab pipeline-trigger variables:{' '}
+              <code className="rounded bg-muted px-1 font-mono">ENVROUTER_OLD_REF</code>,{' '}
+              <code className="rounded bg-muted px-1 font-mono">ENVROUTER_NEW_REF</code>,{' '}
+              <code className="rounded bg-muted px-1 font-mono">ENVROUTER_TRIGGERED_BY_USERNAME</code>,{' '}
+              <code className="rounded bg-muted px-1 font-mono">ENVROUTER_TRIGGERED_BY_FULLNAME</code>,{' '}
+              <code className="rounded bg-muted px-1 font-mono">ENVROUTER_TRIGGERED_BY_IP</code>.
             </p>
           </div>
         </div>

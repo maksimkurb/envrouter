@@ -4,6 +4,8 @@ import { ThemeProvider } from 'next-themes';
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { Toaster } from "@/components/ui/sonner"
+import { Loader2 } from 'lucide-react'
+import { useAuth } from '@/hooks/useAuth'
 import DashboardPage from './pages/v2/DashboardPage';
 import RepositoriesPage from './pages/v2/RepositoriesPage';
 
@@ -14,6 +16,17 @@ function V2App() {
   const [sidebarOpen, setSidebarOpen] = useState(
     () => localStorage.getItem(SIDEBAR_STORAGE_KEY) === 'open'
   )
+  // gate the whole app (including SSE) on the auth check; redirects to
+  // /auth/login when OIDC is enabled and there's no valid session
+  const auth = useAuth()
+
+  if (!auth) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background" role="status" aria-label="Checking authentication">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
 
   return (
     <ThemeProvider
@@ -38,7 +51,7 @@ function V2App() {
               localStorage.setItem(SIDEBAR_STORAGE_KEY, open ? 'open' : 'collapsed')
             }}
           >
-            <AppSidebar collapsible="icon" />
+            <AppSidebar collapsible="icon" auth={auth} />
             <main className="flex-1">
               {/* mobile-only: the off-canvas sidebar needs a trigger; desktop
                   collapses via the button inside the sidebar itself */}

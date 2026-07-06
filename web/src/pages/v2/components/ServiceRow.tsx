@@ -4,10 +4,12 @@ import { Application, DefaultApiFp, Instance, InstancePod, Ref, RefBinding } fro
 import { TableCell, TableRow } from '@/components/ui/table'
 import { Command, CommandItem, CommandList } from '@/components/ui/command'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Package, PackageOpen } from 'lucide-react'
+import { History, Loader2, Package, PackageOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
+import { Button } from '@/components/ui/button'
 import { PodRow } from './PodRow'
+import { RefSwitchLogDialog } from './RefSwitchLogDialog'
 import { refExists, isInstanceDeploying, filterPodsByInstance } from '@/lib/instanceUtils'
 
 interface ServiceRowProps {
@@ -40,6 +42,7 @@ export const ServiceRow = memo(function ServiceRow({
   // full suggestion list on focus; filter only once the user types
   const [dirty, setDirty] = useState(false)
   const [expanded, setExpanded] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   // blur handlers fire before state updates land — mirror the draft in a ref
   const draft = useRef(boundRef)
   // Enter deploys via onSelect and the following blur must not deploy again
@@ -151,9 +154,10 @@ export const ServiceRow = memo(function ServiceRow({
         </TableCell>
         <TableCell>
           <div className="space-y-1">
+            <div className="flex max-w-xs items-center gap-1">
             <Command
               shouldFilter={dirty}
-              className="relative max-w-xs overflow-visible rounded-none bg-transparent p-0"
+              className="relative min-w-0 flex-1 overflow-visible rounded-none bg-transparent p-0"
             >
               <div className="relative">
                 <CommandPrimitive.Input
@@ -231,6 +235,23 @@ export const ServiceRow = memo(function ServiceRow({
                 </CommandList>
               )}
             </Command>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Branch switch history for ${application.name} in ${environmentName}`}
+              title="Branch switch history"
+              onClick={() => setHistoryOpen(true)}
+            >
+              <History className="h-4 w-4" aria-hidden="true" />
+            </Button>
+            </div>
+            {historyOpen && (
+              <RefSwitchLogDialog
+                environmentName={environmentName}
+                applicationName={application.name}
+                onClose={() => setHistoryOpen(false)}
+              />
+            )}
             {editing && ref !== boundRef && (
               <p className="text-xs text-muted-foreground">Enter or Tab deploys, Esc cancels</p>
             )}
