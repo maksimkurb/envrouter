@@ -25,7 +25,21 @@ export function useSSESubscription(onEvent: SSEEventHandler) {
   useEffect(() => {
     let eventSource: EventSource | null = null
     let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
+    let watchdog: ReturnType<typeof setTimeout> | null = null
     let disposed = false
+
+    // The server pings every 10s; if nothing (data or ping) arrives for 30s
+    // the connection is dead in a way onerror can't detect (half-open TCP,
+    // dev proxy, sleep/resume) — drop it and reconnect immediately.
+    const armWatchdog = () => {
+      if (watchdog) clearTimeout(watchdog)
+      watchdog = setTimeout(() => {
+        console.log('SSE stale (no ping for 30s), reconnecting...')
+        eventSource?.close()
+        setConnected(false)
+        connect()
+      }, 30_000)
+    }
 
     const connect = () => {
       if (disposed) return
@@ -34,9 +48,11 @@ export function useSSESubscription(onEvent: SSEEventHandler) {
       eventSource.onopen = () => {
         setConnected(true)
         setError(null)
+        armWatchdog()
       }
 
       eventSource.onmessage = (e) => {
+        armWatchdog()
         try {
           const event = JSON.parse(e.data) as SSEvent
           onEventRef.current(event)
@@ -49,6 +65,7 @@ export function useSSESubscription(onEvent: SSEEventHandler) {
         setConnected(false)
         setError(new Error('SSE connection error'))
         eventSource?.close()
+        if (watchdog) clearTimeout(watchdog)
 
         // Attempt reconnection after 5 seconds
         reconnectTimeout = setTimeout(() => {
@@ -64,6 +81,9 @@ export function useSSESubscription(onEvent: SSEEventHandler) {
       disposed = true
       if (reconnectTimeout) {
         clearTimeout(reconnectTimeout)
+      }
+      if (watchdog) {
+        clearTimeout(watchdog)
       }
       if (eventSource) {
         eventSource.close()
