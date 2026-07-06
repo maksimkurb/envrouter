@@ -101,13 +101,14 @@ export const ServiceRow = memo(function ServiceRow({
   const refIsValid = refExists(ref, refsHeads)
   const errorId = `ref-error-${environmentName}-${application.name}`
 
-  const knownRefs = refsHeads.map((r) => r.ref)
-  const isCustomRef = !!ref.trim() && !knownRefs.includes(ref.trim())
+  const isCustomRef = !!ref.trim() && !refsHeads.some((r) => r.ref === ref.trim())
   // with filtering off (pristine focus), DOM order wins: current branch first,
   // so a bare Enter re-selects it and deploys nothing
   const orderedRefs = dirty
-    ? knownRefs
-    : [...knownRefs].sort((a, b) => (a === boundRef ? -1 : b === boundRef ? 1 : a.localeCompare(b)))
+    ? refsHeads
+    : [...refsHeads].sort((a, b) =>
+        a.ref === boundRef ? -1 : b.ref === boundRef ? 1 : a.ref.localeCompare(b.ref)
+      )
 
   // pods grouped per instance, in instance order (same filter the sheet used)
   const instancePodGroups = instances.map(
@@ -195,8 +196,13 @@ export const ServiceRow = memo(function ServiceRow({
                   className="absolute top-full left-0 z-50 mt-1 w-full rounded-md border bg-popover text-popover-foreground shadow-md"
                 >
                   {orderedRefs.map((knownRef) => (
-                    <CommandItem key={knownRef} value={knownRef} onSelect={commitRef}>
-                      {knownRef}
+                    <CommandItem key={knownRef.ref} value={knownRef.ref} onSelect={commitRef}>
+                      <span className="min-w-0 flex-1 truncate">{knownRef.ref}</span>
+                      {knownRef.commit?.sha && (
+                        <span className="ml-2 font-mono text-xs text-muted-foreground">
+                          {knownRef.commit.sha.slice(0, 7)}
+                        </span>
+                      )}
                     </CommandItem>
                   ))}
                   {isCustomRef && (
