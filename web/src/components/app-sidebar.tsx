@@ -126,20 +126,23 @@ function UserBlock({ auth }: { auth: AuthInfo }) {
       window.location.reload()
     })
   }
+  // avatar shows in both states; card chrome + text + logout are
+  // expanded-only, so collapsed shows just a centered avatar in the rail
+  const title = [auth.fullName, auth.email].filter(Boolean).join(" · ") || auth.userIdentifier
   return (
-    <div className="mb-1 flex items-center gap-2 rounded-lg border bg-card p-2 group-data-[collapsible=icon]:hidden">
+    <div className="mb-1 flex items-center gap-2 rounded-lg border bg-card p-2 group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:justify-center">
       {avatar ? (
-        <img src={avatar} alt="" className="size-8 shrink-0 rounded-full bg-muted" />
+        <img src={avatar} alt="" title={title} className="size-8 shrink-0 rounded-full bg-muted" />
       ) : (
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
+        <div
+          title={title}
+          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted"
+        >
           <UserRound className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
         </div>
       )}
-      <div className="grid min-w-0 flex-1 text-left leading-tight">
-        <span
-          className="truncate text-sm font-medium"
-          title={[auth.fullName, auth.email].filter(Boolean).join(" · ") || auth.userIdentifier}
-        >
+      <div className="grid min-w-0 flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
+        <span className="truncate text-sm font-medium" title={title}>
           {auth.userIdentifier}
         </span>
         <span className="truncate text-xs text-muted-foreground">{accessMode(auth)}</span>
@@ -150,7 +153,7 @@ function UserBlock({ auth }: { auth: AuthInfo }) {
         onClick={logout}
         aria-label="Log out"
         title="Log out"
-        className="shrink-0"
+        className="shrink-0 group-data-[collapsible=icon]:hidden"
       >
         <LogOut className="h-4 w-4" aria-hidden="true" />
       </Button>
