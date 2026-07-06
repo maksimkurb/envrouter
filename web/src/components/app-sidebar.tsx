@@ -137,6 +137,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              <SidebarSeparator className="mx-0 my-2 group-data-[collapsible=icon]:hidden" />
               <SidebarMenuItem className="group-data-[collapsible=icon]:hidden">
                 <SidebarMenuButton render={<Link to="/" />}>
                   <History className="h-4 w-4" aria-hidden="true" />
@@ -144,7 +145,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
-            <SidebarSeparator className="mx-0 mt-2 group-data-[collapsible=icon]:hidden" />
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

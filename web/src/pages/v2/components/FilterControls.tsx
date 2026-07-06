@@ -12,7 +12,15 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { Check, Search, ListChevronsUpDown, ListChevronsDownUp } from 'lucide-react'
+import {
+  Check,
+  ChevronDown,
+  GitBranch,
+  Layers,
+  ListChevronsUpDown,
+  ListChevronsDownUp,
+  Tag,
+} from 'lucide-react'
 
 interface FilterControlsProps {
   environments: Environment[]
@@ -42,7 +50,7 @@ function ServiceFilterCombobox({
   return (
     <Command shouldFilter className="relative w-64 overflow-visible rounded-none bg-transparent p-0">
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Tag className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <CommandPrimitive.Input
           value={value}
           onValueChange={(v) => {
@@ -101,12 +109,20 @@ function EnvironmentFilterCombobox({
 }) {
   return (
     <Popover>
+      {/* styled like the filter inputs so the row reads as one control set */}
       <PopoverTrigger
-        render={<Button variant="outline" className="min-w-48 max-w-md justify-start" />}
+        aria-label="Filter by environment"
+        className={cn(
+          'border-input relative h-9 w-64 rounded-md border bg-transparent py-1 pl-9 pr-8 text-left text-sm outline-none transition-[color,box-shadow]',
+          'focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
+          'dark:bg-input/30'
+        )}
       >
-        <span className="truncate">
+        <Layers className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <span className={cn('block truncate', selectedEnvironments.size === 0 && 'text-muted-foreground')}>
           {selectedEnvironments.size === 0 ? 'All environments' : selectedEnvNames}
         </span>
+        <ChevronDown className="absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
       </PopoverTrigger>
       <PopoverContent className="w-56 p-0" align="start">
         <Command>
@@ -154,7 +170,7 @@ export function FilterControls({
       />
       <div className="w-64">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <GitBranch className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Branch filter"
             aria-label="Filter by branch"
