@@ -102,6 +102,7 @@ export const ServiceRow = memo(function ServiceRow({
   const errorId = `ref-error-${environmentName}-${application.name}`
 
   const isCustomRef = !!ref.trim() && !refsHeads.some((r) => r.ref === ref.trim())
+  const boundSha = refsHeads.find((r) => r.ref === boundRef)?.commit?.sha?.slice(0, 7)
   // with filtering off (pristine focus), DOM order wins: current branch first,
   // so a bare Enter re-selects it and deploys nothing
   const orderedRefs = dirty
@@ -177,17 +178,21 @@ export const ServiceRow = memo(function ServiceRow({
                     'border-input h-8 w-full rounded-md border bg-transparent px-3 py-1 text-sm outline-none transition-[color,box-shadow]',
                     'placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
                     'aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive',
-                    'dark:bg-input/30'
+                    'dark:bg-input/30',
+                    (deploying || (!editing && boundSha)) && 'pr-16'
                   )}
                 />
-                {deploying && (
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                <div className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1.5">
+                  {!editing && boundSha && (
+                    <span className="font-mono text-xs text-muted-foreground">{boundSha}</span>
+                  )}
+                  {deploying && (
                     <Loader2
                       aria-label="Deployment in progress"
                       className="h-4 w-4 animate-spin text-muted-foreground"
                     />
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
               {open && (
                 <CommandList
