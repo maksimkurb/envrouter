@@ -2,7 +2,16 @@ import { useEffect, useState } from 'react'
 import { Application, Commit, DefaultApiFp, InstancePod } from '@/axios'
 import { TableCell, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Loader2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Separator } from '@/components/ui/separator'
+import { Info, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const api = DefaultApiFp()
@@ -34,9 +43,99 @@ function podStatus(pod: InstancePod): { label: string; dotClass: string } {
   return { label: pod.phase, dotClass: 'bg-muted-foreground' }
 }
 
+function PodDetailsModal({
+  pod,
+  commit,
+  commitLoading,
+  onClose,
+}: {
+  pod: InstancePod
+  commit: Commit | undefined
+  commitLoading: boolean
+  onClose: () => void
+}) {
+  const commitValue = (value: React.ReactNode) => {
+    if (commitLoading) return <Loader2 aria-label="Loading" className="h-4 w-4 animate-spin" />
+    return value ?? <span className="text-muted-foreground">—</span>
+  }
+
+  const rows: Array<{ key: string; value: React.ReactNode }> = [
+    { key: 'Pod name', value: pod.name },
+    { key: 'Application', value: pod.application },
+    { key: 'Environment', value: pod.environment },
+    {
+      key: 'Status',
+      value: (
+        <div className="flex items-center gap-2">
+          <Badge variant={pod.phase === 'Running' && pod.ready ? 'default' : 'secondary'}>
+            {pod.phase}
+          </Badge>
+          <span className="text-xs text-muted-foreground">
+            {pod.ready ? 'ready' : 'not ready'}, {pod.started ? 'started' : 'not started'}
+          </span>
+        </div>
+      ),
+    },
+    { key: 'Created', value: pod.createdTime },
+    { key: 'Started', value: pod.startedTime ?? <span className="text-muted-foreground">—</span> },
+    {
+      key: 'Instance',
+      value: pod.parents?.length ? (
+        <div className="space-y-0.5">
+          {pod.parents.map((parent) => (
+            <div key={parent}>{parent}</div>
+          ))}
+        </div>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+    },
+    { key: 'Branch', value: pod.ref || <span className="text-muted-foreground">—</span> },
+    { key: 'Commit', value: pod.commitSha || <span className="text-muted-foreground">—</span> },
+    { key: 'Author', value: commitValue(commit?.author) },
+    {
+      key: 'Commit time',
+      value: commitValue(
+        commit?.timestamp ? new Date(Date.parse(commit.timestamp)).toLocaleString() : undefined
+      ),
+    },
+    {
+      key: 'Commit message',
+      value: commitValue(
+        commit?.message && <span className="whitespace-pre-wrap">{commit.message}</span>
+      ),
+    },
+  ]
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle className="font-mono text-base">{pod.name}</DialogTitle>
+          <DialogDescription>
+            Pod details for {pod.application} in the {pod.environment} environment.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="max-h-[60vh] overflow-y-auto rounded-md border">
+          {rows.map((row, index) => (
+            <div key={row.key}>
+              {index > 0 && <Separator />}
+              <div className="grid grid-cols-3 gap-4 px-4 py-2.5">
+                <div className="text-sm font-medium">{row.key}</div>
+                <div className="col-span-2 font-mono text-xs break-all">{row.value}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export function PodRow({ pod, application }: { pod: InstancePod; application: Application }) {
   const [commit, setCommit] = useState<Commit | undefined>(undefined)
   const [loading, setLoading] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
   useEffect(() => {
     if (pod.commitSha && application.repositoryName) {
@@ -96,7 +195,23 @@ export function PodRow({ pod, application }: { pod: InstancePod; application: Ap
             {pod.phase}
           </Badge>
           <span className="text-xs text-muted-foreground">{status.label}</span>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Show details of pod ${pod.name}`}
+            onClick={() => setDetailsOpen(true)}
+          >
+            <Info className="h-4 w-4" aria-hidden="true" />
+          </Button>
         </div>
+        {detailsOpen && (
+          <PodDetailsModal
+            pod={pod}
+            commit={commit}
+            commitLoading={loading}
+            onClose={() => setDetailsOpen(false)}
+          />
+        )}
       </TableCell>
     </TableRow>
   )
