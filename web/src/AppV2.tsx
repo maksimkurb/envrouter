@@ -40,7 +40,9 @@ function V2App() {
           >
             <AppSidebar collapsible="icon" />
             <main className="flex-1">
-              <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4 bg-card">
+              {/* mobile-only: the off-canvas sidebar needs a trigger; desktop
+                  collapses via the button inside the sidebar itself */}
+              <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4 bg-card md:hidden">
                 <SidebarTrigger />
               </header>
               <div id="main-content" className="flex-1 p-6">
