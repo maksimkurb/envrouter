@@ -1,13 +1,14 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { Fragment, memo, useEffect, useRef, useState } from 'react'
 import { Command as CommandPrimitive } from 'cmdk'
 import { Application, DefaultApiFp, Instance, InstancePod, Ref, RefBinding } from '@/axios'
 import { TableCell, TableRow } from '@/components/ui/table'
 import { Command, CommandItem, CommandList } from '@/components/ui/command'
-import { Loader2 } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
-import InstanceBadge from './InstanceBadge'
-import { refExists, isInstanceDeploying } from '@/lib/instanceUtils'
+import { PodRow } from './PodRow'
+import { refExists, isInstanceDeploying, filterPodsByInstance } from '@/lib/instanceUtils'
 
 interface ServiceRowProps {
   environmentName: string
@@ -38,6 +39,7 @@ export const ServiceRow = memo(function ServiceRow({
   const [open, setOpen] = useState(false)
   // full suggestion list on focus; filter only once the user types
   const [dirty, setDirty] = useState(false)
+  const [expanded, setExpanded] = useState(false)
   // blur handlers fire before state updates land — mirror the draft in a ref
   const draft = useRef(boundRef)
   // Enter deploys via onSelect and the following blur must not deploy again
@@ -107,105 +109,142 @@ export const ServiceRow = memo(function ServiceRow({
     ? knownRefs
     : [...knownRefs].sort((a, b) => (a === boundRef ? -1 : b === boundRef ? 1 : a.localeCompare(b)))
 
+  // pods grouped per instance, in instance order (same filter the sheet used)
+  const instancePodGroups = instances.map(
+    (instance) => [instance, filterPodsByInstance(instancePods, instance)] as const
+  )
+  const podCount = instancePodGroups.reduce((sum, [, pods]) => sum + pods.length, 0)
+  const canExpand = podCount > 0
+
   return (
-    <TableRow>
-      <TableCell></TableCell>
-      <TableCell>
-        <small className="text-sm text-muted-foreground">{application.name}</small>
-      </TableCell>
-      <TableCell>
-        <div className="space-y-1">
-          <Command
-            shouldFilter={dirty}
-            className="relative max-w-xs overflow-visible rounded-none bg-transparent p-0"
-          >
-            <div className="relative">
-              <CommandPrimitive.Input
-                ref={inputRef}
-                value={ref}
-                onValueChange={(value) => {
-                  setRef(value)
-                  draft.current = value
-                  setDirty(true)
-                  setOpen(true)
-                  setEditing(true)
-                }}
-                onFocus={() => {
-                  setEditing(true)
-                  setDirty(false)
-                  setOpen(true)
-                }}
-                onBlur={() => commitRef(draft.current)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') {
-                    e.preventDefault()
-                    cancelEdit()
-                  }
-                }}
-                aria-label={`Target branch for ${application.name} in ${environmentName}`}
-                aria-invalid={!refIsValid && !!ref}
-                aria-describedby={!refIsValid && ref ? errorId : undefined}
-                className={cn(
-                  'border-input h-8 w-full rounded-md border bg-transparent px-3 py-1 text-sm outline-none transition-[color,box-shadow]',
-                  'placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
-                  'aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive',
-                  'dark:bg-input/30'
-                )}
-              />
-              {deploying && (
-                <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                  <Loader2
-                    aria-label="Deployment in progress"
-                    className="h-4 w-4 animate-spin text-muted-foreground"
-                  />
-                </div>
+    <Fragment>
+      <TableRow>
+        <TableCell>
+          {canExpand && (
+            <button
+              type="button"
+              aria-expanded={expanded}
+              aria-label={`${expanded ? 'Collapse' : 'Expand'} pods of ${application.name} in ${environmentName}`}
+              onClick={() => setExpanded((e) => !e)}
+              className="flex items-center justify-center rounded p-1 hover:bg-muted-foreground/10"
+            >
+              {expanded ? (
+                <ChevronDown className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
               )}
-            </div>
-            {open && (
-              <CommandList
-                // keep focus in the input so selecting an item doesn't blur-deploy first
-                onMouseDown={(e) => e.preventDefault()}
-                className="absolute top-full left-0 z-50 mt-1 w-full rounded-md border bg-popover text-popover-foreground shadow-md"
-              >
-                {orderedRefs.map((knownRef) => (
-                  <CommandItem key={knownRef} value={knownRef} onSelect={commitRef}>
-                    {knownRef}
-                  </CommandItem>
-                ))}
-                {isCustomRef && (
-                  <CommandItem value={ref.trim()} onSelect={commitRef}>
-                    {ref.trim()}
-                    <span className="ml-1 text-muted-foreground">(custom ref)</span>
-                  </CommandItem>
+            </button>
+          )}
+        </TableCell>
+        <TableCell>
+          <small className="text-sm text-muted-foreground">{application.name}</small>
+        </TableCell>
+        <TableCell>
+          <div className="space-y-1">
+            <Command
+              shouldFilter={dirty}
+              className="relative max-w-xs overflow-visible rounded-none bg-transparent p-0"
+            >
+              <div className="relative">
+                <CommandPrimitive.Input
+                  ref={inputRef}
+                  value={ref}
+                  onValueChange={(value) => {
+                    setRef(value)
+                    draft.current = value
+                    setDirty(true)
+                    setOpen(true)
+                    setEditing(true)
+                  }}
+                  onFocus={() => {
+                    setEditing(true)
+                    setDirty(false)
+                    setOpen(true)
+                  }}
+                  onBlur={() => commitRef(draft.current)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      e.preventDefault()
+                      cancelEdit()
+                    }
+                  }}
+                  aria-label={`Target branch for ${application.name} in ${environmentName}`}
+                  aria-invalid={!refIsValid && !!ref}
+                  aria-describedby={!refIsValid && ref ? errorId : undefined}
+                  className={cn(
+                    'border-input h-8 w-full rounded-md border bg-transparent px-3 py-1 text-sm outline-none transition-[color,box-shadow]',
+                    'placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
+                    'aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive',
+                    'dark:bg-input/30'
+                  )}
+                />
+                {deploying && (
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                    <Loader2
+                      aria-label="Deployment in progress"
+                      className="h-4 w-4 animate-spin text-muted-foreground"
+                    />
+                  </div>
                 )}
-              </CommandList>
+              </div>
+              {open && (
+                <CommandList
+                  // keep focus in the input so selecting an item doesn't blur-deploy first
+                  onMouseDown={(e) => e.preventDefault()}
+                  className="absolute top-full left-0 z-50 mt-1 w-full rounded-md border bg-popover text-popover-foreground shadow-md"
+                >
+                  {orderedRefs.map((knownRef) => (
+                    <CommandItem key={knownRef} value={knownRef} onSelect={commitRef}>
+                      {knownRef}
+                    </CommandItem>
+                  ))}
+                  {isCustomRef && (
+                    <CommandItem value={ref.trim()} onSelect={commitRef}>
+                      {ref.trim()}
+                      <span className="ml-1 text-muted-foreground">(custom ref)</span>
+                    </CommandItem>
+                  )}
+                </CommandList>
+              )}
+            </Command>
+            {editing && ref !== boundRef && (
+              <p className="text-xs text-muted-foreground">Enter or Tab deploys, Esc cancels</p>
             )}
-          </Command>
-          {editing && ref !== boundRef && (
-            <p className="text-xs text-muted-foreground">Enter or Tab deploys, Esc cancels</p>
-          )}
-          {!refIsValid && ref && (
-            <p id={errorId} role="alert" className="text-xs text-destructive">
-              Ref does not exist
-            </p>
-          )}
-        </div>
-      </TableCell>
-      <TableCell>
-        <div className="flex gap-2 flex-wrap">
-          {instances.map((instance) => (
-            <InstanceBadge
-              key={instance.name}
-              application={application}
-              instance={instance}
-              instancePods={instancePods.filter(
-                (pod) => pod.parents?.includes(`${instance.type}/${instance.name}`) || false
-              )}
-              refsHeads={refsHeads.filter((r) => refBinding?.ref && r.ref === refBinding.ref)}
-            />
-          ))}
-        </div>
-      </TableCell>
-    </TableRow>
+            {!refIsValid && ref && (
+              <p id={errorId} role="alert" className="text-xs text-destructive">
+                Ref does not exist
+              </p>
+            )}
+          </div>
+        </TableCell>
+        <TableCell>
+          <div className="flex gap-2 flex-wrap">
+            {instancePodGroups.map(([instance, pods]) => (
+              <Badge
+                key={instance.name}
+                variant="outline"
+                className={cn(pods.length > 0 && 'cursor-pointer')}
+                render={
+                  pods.length > 0 ? (
+                    <button
+                      type="button"
+                      aria-expanded={expanded}
+                      aria-label={`${instance.name}: ${pods.length} ${pods.length === 1 ? 'pod' : 'pods'} on ${instance.ref || 'unknown ref'} — toggle pod list`}
+                      onClick={() => setExpanded((e) => !e)}
+                    />
+                  ) : undefined
+                }
+              >
+                {instance.name}: {pods.length}, {instance.ref}
+              </Badge>
+            ))}
+          </div>
+        </TableCell>
+      </TableRow>
+      {expanded &&
+        instancePodGroups.map(([instance, pods]) =>
+          pods.map((pod) => <PodRow key={`${instance.name}-${pod.name}`} pod={pod} application={application} />)
+        )}
+    </Fragment>
   )
 })
