@@ -227,6 +227,14 @@ export function RepositoryDialog({
                 value={credentialsSecret}
                 onValueChange={(value) => value && setCredentialsSecret(value)}
                 disabled={saving}
+                // display labels for SelectValue (otherwise the raw sentinel renders)
+                items={[
+                  { value: NONE, label: 'None' },
+                  ...credentialsSecrets.map((secret) => ({
+                    value: secret.name,
+                    label: `${secret.name} (${secret.type})`,
+                  })),
+                ]}
               >
                 <SelectTrigger id="repo-secret" className="w-full">
                   <SelectValue />

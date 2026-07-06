@@ -76,6 +76,14 @@ export function ApplicationDialog({ application, repositories, onClose }: Applic
               value={repositoryName}
               onValueChange={(value) => value && setRepositoryName(value)}
               disabled={saving}
+              // display labels for SelectValue (otherwise the raw sentinel renders)
+              items={[
+                { value: NONE, label: 'None' },
+                ...repositories.map((repository) => ({
+                  value: repository.name,
+                  label: repository.name,
+                })),
+              ]}
             >
               <SelectTrigger id="app-repository" className="w-full">
                 <SelectValue />
