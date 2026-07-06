@@ -29,6 +29,7 @@ type gitClient struct {
 	credentialsSecretService CredentialsSecretService
 	mu                       sync.Mutex
 	repoLocks                map[string]*sync.Mutex
+	lastFetch                map[string]time.Time
 }
 
 func NewGitClient(
@@ -39,8 +40,14 @@ func NewGitClient(
 		repositoryService:        repositoryService,
 		credentialsSecretService: credentialsSecretService,
 		repoLocks:                map[string]*sync.Mutex{},
+		lastFetch:                map[string]time.Time{},
 	}
 }
+
+// ponytail: fixed 15s throttle between on-demand fetches for the same repo.
+// The scan job fetches every 30s anyway, so commit lookups only fetch when a
+// requested commit is genuinely absent locally and the cache is cold.
+const commitFetchThrottle = 15 * time.Second
 
 // lockRepository serializes all on-disk access to a single repository:
 // go-git's filesystem storage is not safe under concurrent clone/fetch/read.
@@ -88,15 +95,73 @@ func (g *gitClient) getRepository(repositoryName string) (r *git.Repository, err
 	return r, nil
 }
 
+// getRepositoryNoFetch opens the local repo (cloning only if absent) without
+// fetching. Used by on-demand commit lookups so a cache miss doesn't force a
+// network round-trip on every request.
+func (g *gitClient) getRepositoryNoFetch(repositoryName string) (r *git.Repository, err error) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			err = fmt.Errorf("panic during git operation for %s: %v", repositoryName, rec)
+			log.Errorf("Recovered from panic in getRepositoryNoFetch(%s): %v", repositoryName, rec)
+		}
+	}()
+
+	options, err := g.getGitOptions(repositoryName)
+	if err != nil {
+		return nil, err
+	}
+	path := fmt.Sprintf("/tmp/git/%s", repositoryName)
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		r, err = git.PlainClone(path, true, options)
+		if err != nil {
+			return nil, err
+		}
+		g.mu.Lock()
+		g.lastFetch[repositoryName] = time.Now()
+		g.mu.Unlock()
+		return r, nil
+	}
+	return git.PlainOpenWithOptions(path, &git.PlainOpenOptions{})
+}
+
+func (g *gitClient) fetchIfStale(repositoryName string, r *git.Repository) error {
+	g.mu.Lock()
+	last := g.lastFetch[repositoryName]
+	g.mu.Unlock()
+	if time.Since(last) < commitFetchThrottle {
+		return nil
+	}
+	options, err := g.getGitOptions(repositoryName)
+	if err != nil {
+		return err
+	}
+	err = r.Fetch(&git.FetchOptions{RemoteName: "origin", Auth: options.Auth, Progress: options.Progress})
+	g.mu.Lock()
+	g.lastFetch[repositoryName] = time.Now()
+	g.mu.Unlock()
+	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+		return err
+	}
+	return nil
+}
+
 func (g *gitClient) GetCommitByHash(repositoryName string, hash string) (*api.Commit, error) {
 	lock := g.lockRepository(repositoryName)
 	lock.Lock()
 	defer lock.Unlock()
-	r, err := g.getRepository(repositoryName)
+	r, err := g.getRepositoryNoFetch(repositoryName)
 	if err != nil {
 		return nil, err
 	}
-	return g.getCommitByHash(r, plumbing.NewHash(hash))
+	h := plumbing.NewHash(hash)
+	if commit, err := g.getCommitByHash(r, h); err == nil {
+		return commit, nil
+	}
+	// commit not present locally — fetch (throttled) and retry once
+	if err := g.fetchIfStale(repositoryName, r); err != nil {
+		return nil, err
+	}
+	return g.getCommitByHash(r, h)
 }
 
 func (g *gitClient) getCommitByHash(repository *git.Repository, hash plumbing.Hash) (*api.Commit, error) {

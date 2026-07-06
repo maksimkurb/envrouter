@@ -16,4 +16,6 @@ type Snapshot struct {
 	Instances    []*Instance    `json:"instances"`
 	InstancePods []*InstancePod `json:"instancePods"`
 	RefsHeads    []*Ref         `json:"refsHeads"`
+	// DefaultRef is the ref shown for env×app pairs with no stored binding.
+	DefaultRef string `json:"defaultRef"`
 }

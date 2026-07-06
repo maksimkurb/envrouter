@@ -15,6 +15,7 @@ import (
 type RefService interface {
 	SaveBinding(refBinding *api.RefBinding, actor auth.Actor) (*api.RefBinding, error)
 	FindAllBindings(environmentFilter *string, applicationFilter *string, refFilter *string) ([]*api.RefBinding, error)
+	SnapshotBindings() ([]*api.RefBinding, error)
 }
 
 type refService struct {
@@ -88,6 +89,25 @@ func (r *refService) SaveBinding(refBinding *api.RefBinding, actor auth.Actor) (
 	})
 	err = r.deployService.Deploy(refBinding.Application, refBinding.Ref, DeployMeta{OldRef: oldRef, Actor: actor})
 	return refBinding, err
+}
+
+// SnapshotBindings returns only the real stored bindings (sparse), with one
+// ConfigMap GET and no env×app cross-product. The v2 snapshot uses this;
+// unbound pairs are filled with Snapshot.DefaultRef on the client.
+func (r *refService) SnapshotBindings() ([]*api.RefBinding, error) {
+	data, err := r.dataStorage.GetAll()
+	if err != nil {
+		return nil, err
+	}
+	result := []*api.RefBinding{}
+	for _, v := range data {
+		item := api.RefBinding{}
+		if err := yaml.Unmarshal([]byte(v), &item); err != nil {
+			return nil, err
+		}
+		result = append(result, &item)
+	}
+	return result, nil
 }
 
 func (r *refService) FindAllBindings(environmentFilter *string, applicationFilter *string, refFilter *string) ([]*api.RefBinding, error) {
