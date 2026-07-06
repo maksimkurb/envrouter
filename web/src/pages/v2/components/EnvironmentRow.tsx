@@ -15,7 +15,7 @@ export const EnvironmentRow = memo(function EnvironmentRow({
 }: EnvironmentRowProps) {
   return (
     <TableRow
-      className="font-medium bg-muted/50 hover:bg-muted cursor-pointer"
+      className="font-medium bg-primary/10 hover:bg-primary/15 cursor-pointer"
       onClick={() => onToggle(environmentName)}
     >
       <TableCell>
