@@ -33,6 +33,28 @@ function getCommit(repositoryName: string, sha: string): Promise<Commit> {
   return promise
 }
 
+// backend sends Go's Time.String() format ("2026-07-06 10:12:34 +0000 UTC"),
+// which Date.parse doesn't understand
+function parseGoTime(value?: string | null): Date | null {
+  if (!value) return null
+  const native = new Date(value)
+  if (!isNaN(native.getTime())) return native
+  const m = value.match(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})(?:\.\d+)? ([+-]\d{2})(\d{2})/)
+  if (!m) return null
+  const parsed = new Date(`${m[1]}T${m[2]}${m[3]}:${m[4]}`)
+  return isNaN(parsed.getTime()) ? null : parsed
+}
+
+function timeAgo(date: Date): string {
+  const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000))
+  if (seconds < 60) return `${seconds}s ago`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 48) return `${hours}h ago`
+  return `${Math.floor(hours / 24)}d ago`
+}
+
 function podStatus(pod: InstancePod): { label: string; dotClass: string } {
   if (pod.phase === 'Running' && pod.ready) {
     return { label: 'Ready', dotClass: 'bg-green-500' }
@@ -136,6 +158,15 @@ export function PodRow({ pod, application }: { pod: InstancePod; application: Ap
   const [commit, setCommit] = useState<Commit | undefined>(undefined)
   const [loading, setLoading] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const copySha = () => {
+    if (!pod.commitSha) return
+    navigator.clipboard.writeText(pod.commitSha).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
 
   useEffect(() => {
     if (pod.commitSha && application.repositoryName) {
@@ -159,22 +190,40 @@ export function PodRow({ pod, application }: { pod: InstancePod; application: Ap
 
   const status = podStatus(pod)
   const shortSha = pod.commitSha ? pod.commitSha.slice(0, 7) : ''
+  const created = parseGoTime(pod.createdTime)
+  const started = parseGoTime(pod.startedTime)
 
   return (
     <TableRow className="bg-muted/30 hover:bg-muted/40">
       <TableCell></TableCell>
       <TableCell>
-        <div className="flex items-center gap-2 pl-4">
+        <div className="flex items-center gap-1 pl-4">
           <span className={cn('h-2 w-2 shrink-0 rounded-full', status.dotClass)} aria-hidden="true" />
-          <span className="font-mono text-xs text-muted-foreground" title={`Created ${pod.createdTime}`}>
-            {pod.name}
-          </span>
+          <span className="ml-1 font-mono text-xs text-muted-foreground">{pod.name}</span>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={`Show details of pod ${pod.name}`}
+            onClick={() => setDetailsOpen(true)}
+          >
+            <Info aria-hidden="true" />
+          </Button>
         </div>
       </TableCell>
       <TableCell>
         <div className="text-xs font-mono">
           {pod.ref || '—'}
-          {shortSha && <span className="text-muted-foreground" title={pod.commitSha}>{` @ ${shortSha}`}</span>}
+          {shortSha && (
+            <button
+              type="button"
+              onClick={copySha}
+              title={`Copy full commit hash: ${pod.commitSha}`}
+              aria-label={`Copy full commit hash of pod ${pod.name}`}
+              className="cursor-pointer text-muted-foreground hover:text-foreground hover:underline"
+            >
+              {` @ ${copied ? 'copied!' : shortSha}`}
+            </button>
+          )}
         </div>
         {loading ? (
           <Loader2 aria-label="Loading commit info" className="mt-0.5 h-3 w-3 animate-spin text-muted-foreground" />
@@ -194,15 +243,14 @@ export function PodRow({ pod, application }: { pod: InstancePod; application: Ap
           <Badge variant={pod.phase === 'Running' && pod.ready ? 'default' : 'secondary'}>
             {pod.phase}
           </Badge>
-          <span className="text-xs text-muted-foreground">{status.label}</span>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Show details of pod ${pod.name}`}
-            onClick={() => setDetailsOpen(true)}
+          <span
+            className="text-xs text-muted-foreground"
+            title={`Created ${pod.createdTime}${pod.startedTime ? `, started ${pod.startedTime}` : ''}`}
           >
-            <Info className="h-4 w-4" aria-hidden="true" />
-          </Button>
+            {status.label}
+            {created && ` · created ${timeAgo(created)}`}
+            {started && ` · started ${timeAgo(started)}`}
+          </span>
         </div>
         {detailsOpen && (
           <PodDetailsModal
