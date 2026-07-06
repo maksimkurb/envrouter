@@ -47,14 +47,16 @@ EnvRouter can require login through any OIDC discovery-compliant provider
 | `ENVROUTER_OIDC_INSECURE_COOKIE` | `false` | Set `true` for plain-HTTP dev setups |
 | `ENVROUTER_OIDC_CLAIM_GROUPS` | `groups` | Claim fallback list for the user's group membership (string array) |
 | `ENVROUTER_OIDC_GROUP_VIEW` | *(empty = any authenticated user)* | Group required to log in / view. Set it to restrict access to members only |
-| `ENVROUTER_OIDC_GROUP_DEPLOY` | *(empty = any authenticated user)* | Group required to change branch bindings (deploy) |
-| `ENVROUTER_OIDC_GROUP_CONFIGURE` | *(empty = any authenticated user)* | Group required to edit repositories, applications and credential secrets — and thus webhook URLs |
+| `ENVROUTER_OIDC_GROUP_DEPLOY` | *(empty = any authenticated user)* | Group required to change branch bindings (deploy). Implies view |
+| `ENVROUTER_OIDC_GROUP_CONFIGURE` | *(empty = any authenticated user)* | Group required to edit repositories, applications and credential secrets — and thus webhook URLs. Implies deploy and view |
 
-Authorization is group-based and layered: **view** gates login (a user outside
-the group is rejected at the callback with 403), **deploy** gates branch
-switches, **configure** gates repository/application/secret editing. An empty
-group variable means "allow all authenticated users" at that level; setting it
-enforces strict membership. Restricting `configure` is the primary mitigation
+Authorization is group-based and hierarchical: **view** gates login (a user
+outside the group is rejected at the callback with 403), **deploy** gates
+branch switches, **configure** gates repository/application/secret editing.
+Higher levels include the lower ones — a member of the configure group can
+also deploy and view without being in those groups. An empty group variable
+means "allow all authenticated users" at that level (and, by the hierarchy, at
+the levels below it); setting it enforces strict membership. Restricting `configure` is the primary mitigation
 for webhook SSRF, since only that level can set webhook URLs.
 
 ### Security & limits

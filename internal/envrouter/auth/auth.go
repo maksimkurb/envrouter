@@ -146,8 +146,10 @@ func (s *Service) permitted(a Actor, group string) bool {
 	return containsString(a.Groups, group)
 }
 
-func (s *Service) CanView(a Actor) bool      { return s.permitted(a, s.cfg.GroupView) }
-func (s *Service) CanDeploy(a Actor) bool    { return s.permitted(a, s.cfg.GroupDeploy) }
+// Levels are hierarchical: configure ⊃ deploy ⊃ view, so an admin needs only
+// the configure group, an editor only the deploy group.
+func (s *Service) CanView(a Actor) bool      { return s.permitted(a, s.cfg.GroupView) || s.CanDeploy(a) }
+func (s *Service) CanDeploy(a Actor) bool    { return s.permitted(a, s.cfg.GroupDeploy) || s.CanConfigure(a) }
 func (s *Service) CanConfigure(a Actor) bool { return s.permitted(a, s.cfg.GroupConfigure) }
 
 // safeRedirect sanitizes the `rd` param to a same-site absolute path, defeating
