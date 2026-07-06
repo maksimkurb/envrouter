@@ -160,7 +160,8 @@ function CommandItem({
       {...props}
     >
       {children}
-      <CheckIcon className="ml-auto opacity-0 group-has-data-[slot=command-shortcut]/command-item:hidden group-data-[checked=true]/command-item:opacity-100" />
+      {/* hidden (not opacity-0) when unchecked so it doesn't reserve ghost space */}
+      <CheckIcon className="ml-auto hidden group-data-[checked=true]/command-item:inline-block" />
     </CommandPrimitive.Item>
   )
 }
