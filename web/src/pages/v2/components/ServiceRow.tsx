@@ -47,8 +47,15 @@ export const ServiceRow = memo(function ServiceRow({
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Sync local state with prop changes, but never clobber the input mid-edit
+  // or while a deploy is in flight (the binding still carries the OLD ref
+  // until the POST response / RefBinding event lands — syncing then would
+  // flash the old branch name)
   useEffect(() => {
-    if (!editing) {
+    if (boundRef === lastDeployed.current) {
+      // deploy confirmed by the binding — resume normal prop syncing
+      lastDeployed.current = null
+    }
+    if (!editing && lastDeployed.current === null) {
       setRef(boundRef)
       draft.current = boundRef
     }
