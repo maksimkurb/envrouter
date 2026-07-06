@@ -1,8 +1,10 @@
-import React, { memo, useEffect, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
+import { Command as CommandPrimitive } from 'cmdk'
 import { Application, DefaultApiFp, Instance, InstancePod, Ref, RefBinding } from '@/axios'
 import { TableCell, TableRow } from '@/components/ui/table'
-import { Input } from '@/components/ui/input'
+import { Command, CommandItem, CommandList } from '@/components/ui/command'
 import { Loader2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import InstanceBadge from './InstanceBadge'
 import { refExists, isInstanceDeploying } from '@/lib/instanceUtils'
@@ -29,21 +31,36 @@ export const ServiceRow = memo(function ServiceRow({
   onRefBindingChanged,
 }: ServiceRowProps) {
   const { toast } = useToast()
-  const [ref, setRef] = useState(refBinding?.ref || '')
+  const boundRef = refBinding?.ref || ''
+
+  const [ref, setRef] = useState(boundRef)
   const [editing, setEditing] = useState(false)
+  const [open, setOpen] = useState(false)
+  // full suggestion list on focus; filter only once the user types
+  const [dirty, setDirty] = useState(false)
+  // blur handlers fire before state updates land — mirror the draft in a ref
+  const draft = useRef(boundRef)
+  // Enter deploys via onSelect and the following blur must not deploy again
+  const lastDeployed = useRef<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   // Sync local state with prop changes, but never clobber the input mid-edit
   useEffect(() => {
     if (!editing) {
-      setRef(refBinding?.ref || '')
+      setRef(boundRef)
+      draft.current = boundRef
     }
-  }, [refBinding?.ref, editing])
+  }, [boundRef, editing])
 
-  const boundRef = refBinding?.ref || ''
-
-  const commitRef = (newRef: string) => {
+  const commitRef = (value: string) => {
+    setOpen(false)
     setEditing(false)
-    if (newRef === boundRef) return
+    setDirty(false)
+    const newRef = value.trim()
+    if (!newRef || newRef === boundRef || newRef === lastDeployed.current) return
+    lastDeployed.current = newRef
+    setRef(newRef)
+    draft.current = newRef
     const newRefBinding: RefBinding = refBinding
       ? { ...refBinding, ref: newRef }
       : { environment: environmentName, application: application.name, ref: newRef }
@@ -58,7 +75,9 @@ export const ServiceRow = memo(function ServiceRow({
         })
       })
       .catch(() => {
+        lastDeployed.current = null
         setRef(boundRef)
+        draft.current = boundRef
         toast({
           title: 'Deployment failed',
           description: `Ref ${newRef} could not be deployed to ${environmentName} environment`,
@@ -67,14 +86,26 @@ export const ServiceRow = memo(function ServiceRow({
       })
   }
 
-  const revert = () => {
-    setEditing(false)
+  const cancelEdit = () => {
+    draft.current = boundRef
     setRef(boundRef)
+    setOpen(false)
+    setEditing(false)
+    setDirty(false)
+    inputRef.current?.blur()
   }
 
   const deploying = isInstanceDeploying(refBinding, refsHeads, instancePods)
   const refIsValid = refExists(ref, refsHeads)
   const errorId = `ref-error-${environmentName}-${application.name}`
+
+  const knownRefs = refsHeads.map((r) => r.ref)
+  const isCustomRef = !!ref.trim() && !knownRefs.includes(ref.trim())
+  // with filtering off (pristine focus), DOM order wins: current branch first,
+  // so a bare Enter re-selects it and deploys nothing
+  const orderedRefs = dirty
+    ? knownRefs
+    : [...knownRefs].sort((a, b) => (a === boundRef ? -1 : b === boundRef ? 1 : a.localeCompare(b)))
 
   return (
     <TableRow>
@@ -84,34 +115,74 @@ export const ServiceRow = memo(function ServiceRow({
       </TableCell>
       <TableCell>
         <div className="space-y-1">
-          <div className="relative max-w-xs">
-            <Input
-              value={ref}
-              aria-label={`Target branch for ${application.name} in ${environmentName}`}
-              aria-invalid={!refIsValid && !!ref}
-              aria-describedby={!refIsValid && ref ? errorId : undefined}
-              onFocus={() => setEditing(true)}
-              onChange={(e) => setRef(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  commitRef(e.currentTarget.value)
-                  e.currentTarget.blur()
-                } else if (e.key === 'Escape') {
-                  revert()
-                  e.currentTarget.blur()
-                }
-              }}
-              onBlur={revert}
-              className={`h-8 text-sm ${!refIsValid && ref ? 'border-destructive' : ''}`}
-            />
-            {deploying && (
-              <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                <Loader2 aria-label="Deployment in progress" className="h-4 w-4 animate-spin text-muted-foreground" />
-              </div>
+          <Command
+            shouldFilter={dirty}
+            className="relative max-w-xs overflow-visible rounded-none bg-transparent p-0"
+          >
+            <div className="relative">
+              <CommandPrimitive.Input
+                ref={inputRef}
+                value={ref}
+                onValueChange={(value) => {
+                  setRef(value)
+                  draft.current = value
+                  setDirty(true)
+                  setOpen(true)
+                  setEditing(true)
+                }}
+                onFocus={() => {
+                  setEditing(true)
+                  setDirty(false)
+                  setOpen(true)
+                }}
+                onBlur={() => commitRef(draft.current)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.preventDefault()
+                    cancelEdit()
+                  }
+                }}
+                aria-label={`Target branch for ${application.name} in ${environmentName}`}
+                aria-invalid={!refIsValid && !!ref}
+                aria-describedby={!refIsValid && ref ? errorId : undefined}
+                className={cn(
+                  'border-input h-8 w-full rounded-md border bg-transparent px-3 py-1 text-sm outline-none transition-[color,box-shadow]',
+                  'placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
+                  'aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive',
+                  'dark:bg-input/30'
+                )}
+              />
+              {deploying && (
+                <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                  <Loader2
+                    aria-label="Deployment in progress"
+                    className="h-4 w-4 animate-spin text-muted-foreground"
+                  />
+                </div>
+              )}
+            </div>
+            {open && (
+              <CommandList
+                // keep focus in the input so selecting an item doesn't blur-deploy first
+                onMouseDown={(e) => e.preventDefault()}
+                className="absolute top-full left-0 z-50 mt-1 w-full rounded-md border bg-popover text-popover-foreground shadow-md"
+              >
+                {orderedRefs.map((knownRef) => (
+                  <CommandItem key={knownRef} value={knownRef} onSelect={commitRef}>
+                    {knownRef}
+                  </CommandItem>
+                ))}
+                {isCustomRef && (
+                  <CommandItem value={ref.trim()} onSelect={commitRef}>
+                    {ref.trim()}
+                    <span className="ml-1 text-muted-foreground">(custom ref)</span>
+                  </CommandItem>
+                )}
+              </CommandList>
             )}
-          </div>
+          </Command>
           {editing && ref !== boundRef && (
-            <p className="text-xs text-muted-foreground">Press Enter to deploy, Escape to cancel</p>
+            <p className="text-xs text-muted-foreground">Enter or Tab deploys, Esc cancels</p>
           )}
           {!refIsValid && ref && (
             <p id={errorId} role="alert" className="text-xs text-destructive">
