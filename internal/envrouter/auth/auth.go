@@ -244,6 +244,12 @@ func (s *Service) Middleware() gin.HandlerFunc {
 			return
 		}
 		actor.IP = c.ClientIP()
+		// re-check on every request, not just at login: group config may have
+		// changed since the session cookie was issued
+		if !s.CanView(actor) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "your account is not in a group permitted to view EnvRouter"})
+			return
+		}
 		c.Set(actorKey, actor)
 		c.Next()
 	}
@@ -359,6 +365,7 @@ func (s *Service) UserinfoHandler(c *gin.Context) {
 				"fullName":       actor.FullName,
 				"email":          actor.Email,
 				"groups":         actor.Groups,
+				"canView":        s.CanView(actor),
 				"canDeploy":      s.CanDeploy(actor),
 				"canConfigure":   s.CanConfigure(actor),
 			})

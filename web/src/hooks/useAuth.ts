@@ -10,6 +10,7 @@ export interface AuthInfo {
   email?: string
   groups?: string[]
   // absent on older backends — consumers treat missing as allowed (`!== false`)
+  canView?: boolean
   canDeploy?: boolean
   canConfigure?: boolean
 }

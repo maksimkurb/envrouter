@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { ThemeProvider } from 'next-themes';
+import axios from 'axios';
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
+import { Button } from "@/components/ui/button"
 import { Toaster } from "@/components/ui/sonner"
-import { Loader2 } from 'lucide-react'
+import { Loader2, ShieldX } from 'lucide-react'
+import { BASE_PATH } from '@/axios/base'
 import { AuthContext, useAuth } from '@/hooks/useAuth'
 import DashboardPage from './pages/v2/DashboardPage';
 import RepositoriesPage from './pages/v2/RepositoriesPage';
@@ -24,6 +27,37 @@ function V2App() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background" role="status" aria-label="Checking authentication">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  // authenticated but not in the view group — the API rejects everything with
+  // 403, so show a clear error instead of an empty dashboard
+  if (auth.enabled && auth.authenticated && auth.canView === false) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background p-6">
+        <div className="flex max-w-md flex-col items-center gap-4 rounded-lg border bg-card p-8 text-center shadow-sm" role="alert">
+          <ShieldX className="h-10 w-10 text-destructive" aria-hidden="true" />
+          <h1 className="text-lg font-semibold">Access denied</h1>
+          <p className="text-sm text-muted-foreground">
+            You are signed in as{' '}
+            <span className="font-medium text-foreground">
+              {auth.fullName || auth.userIdentifier}
+            </span>
+            , but your account is not in a group permitted to view EnvRouter.
+            Contact your administrator, or sign in with a different account.
+          </p>
+          <Button
+            variant="outline"
+            onClick={() => {
+              axios.post(`${BASE_PATH}/auth/logout`).finally(() => {
+                window.location.href = `${BASE_PATH}/auth/login`
+              })
+            }}
+          >
+            Log out
+          </Button>
+        </div>
       </div>
     )
   }
