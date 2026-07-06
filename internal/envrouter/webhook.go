@@ -9,7 +9,7 @@ import (
 )
 
 type WebhookService interface {
-	Invoke(webhook string) error
+	Invoke(webhook string, variables map[string]string) error
 }
 
 type webhookService struct {
@@ -22,8 +22,14 @@ func NewWebhookService() WebhookService {
 	}
 }
 
-func (w *webhookService) Invoke(webhook string) error {
-	resp, err := w.client.PostForm(webhook, url.Values{})
+func (w *webhookService) Invoke(webhook string, variables map[string]string) error {
+	// GitLab pipeline-trigger form format: variables[KEY]=value; composes
+	// with token=/ref= query params already present in the configured URL
+	form := url.Values{}
+	for key, value := range variables {
+		form.Set(fmt.Sprintf("variables[%s]", key), value)
+	}
+	resp, err := w.client.PostForm(webhook, form)
 	if err != nil {
 		return err
 	}

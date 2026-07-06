@@ -2,15 +2,18 @@ package envrouter
 
 import (
 	"errors"
+	"sort"
+	"time"
+
 	"github.com/ghodss/yaml"
 	"gitlab.com/jonasasx/envrouter/internal/envrouter/api"
+	"gitlab.com/jonasasx/envrouter/internal/envrouter/auth"
 	"gitlab.com/jonasasx/envrouter/internal/envrouter/k8s"
 	"gitlab.com/jonasasx/envrouter/internal/utils"
-	"sort"
 )
 
 type RefService interface {
-	SaveBinding(refBinding *api.RefBinding) (*api.RefBinding, error)
+	SaveBinding(refBinding *api.RefBinding, actor auth.Actor) (*api.RefBinding, error)
 	FindAllBindings(environmentFilter *string, applicationFilter *string, refFilter *string) ([]*api.RefBinding, error)
 }
 
@@ -20,6 +23,7 @@ type refService struct {
 	applicationService ApplicationService
 	deployService      DeployService
 	eventsObserver     utils.Observer
+	auditLog           AuditLog
 }
 
 func NewRefService(
@@ -28,6 +32,7 @@ func NewRefService(
 	applicationService ApplicationService,
 	deployService DeployService,
 	eventsObserver utils.Observer,
+	auditLog AuditLog,
 ) RefService {
 	return &refService{
 		dataStorage,
@@ -35,24 +40,45 @@ func NewRefService(
 		applicationService,
 		deployService,
 		eventsObserver,
+		auditLog,
 	}
 }
 
-func (r *refService) SaveBinding(refBinding *api.RefBinding) (*api.RefBinding, error) {
+func (r *refService) SaveBinding(refBinding *api.RefBinding, actor auth.Actor) (*api.RefBinding, error) {
 	if !r.environmentService.ExistsByName(refBinding.Environment) {
 		return nil, errors.New("Environment " + refBinding.Environment + " is not found")
 	}
 	if !r.applicationService.ExistsByName(refBinding.Application) {
 		return nil, errors.New("Application " + refBinding.Application + " is not found")
 	}
+	key := refBinding.Environment + "-" + refBinding.Application
+	// DefaultRef mirrors what FindAllBindings reports for unbound pairs
+	oldRef := DefaultRef
+	if existing, err := r.dataStorage.GetByKey(key); err == nil {
+		item := api.RefBinding{}
+		if yaml.Unmarshal([]byte(existing), &item) == nil && item.Ref != "" {
+			oldRef = item.Ref
+		}
+	}
 	value, err := yaml.Marshal(refBinding)
 	if err != nil {
 		return nil, err
 	}
-	err = r.dataStorage.Save(refBinding.Environment+"-"+refBinding.Application, string(value))
+	err = r.dataStorage.Save(key, string(value))
 	if err != nil {
 		return nil, err
 	}
+	r.auditLog.Record(RefSwitch{
+		Time:           time.Now(),
+		Environment:    refBinding.Environment,
+		Application:    refBinding.Application,
+		OldRef:         oldRef,
+		NewRef:         refBinding.Ref,
+		UserIdentifier: actor.UserIdentifier,
+		FullName:       actor.FullName,
+		Email:          actor.Email,
+		IP:             actor.IP,
+	})
 	// the binding is persisted at this point — tell every connected client,
 	// even if the deploy webhook below fails
 	r.eventsObserver.Publish(nil, api.SSEvent{
@@ -60,7 +86,7 @@ func (r *refService) SaveBinding(refBinding *api.RefBinding) (*api.RefBinding, e
 		Item:     refBinding,
 		Event:    "UPDATED",
 	})
-	err = r.deployService.Deploy(refBinding.Application, refBinding.Ref)
+	err = r.deployService.Deploy(refBinding.Application, refBinding.Ref, DeployMeta{OldRef: oldRef, Actor: actor})
 	return refBinding, err
 }
 

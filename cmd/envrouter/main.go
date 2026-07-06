@@ -9,6 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"gitlab.com/jonasasx/envrouter/internal/envrouter"
 	"gitlab.com/jonasasx/envrouter/internal/envrouter/api"
+	"gitlab.com/jonasasx/envrouter/internal/envrouter/auth"
 	"gitlab.com/jonasasx/envrouter/internal/envrouter/k8s"
 	"gitlab.com/jonasasx/envrouter/internal/utils"
 	"io"
@@ -60,7 +61,14 @@ func main() {
 
 	deployService := envrouter.NewDeployService(applicationService, webhookService)
 
-	refService := envrouter.NewRefService(dataStorageFactory.NewRefBindingStorage(), environmentService, applicationService, deployService, eventsObserver)
+	auditLog := envrouter.NewAuditLog()
+
+	refService := envrouter.NewRefService(dataStorageFactory.NewRefBindingStorage(), environmentService, applicationService, deployService, eventsObserver, auditLog)
+
+	authService, err := auth.New(context.TODO(), auth.ConfigFromEnv())
+	if err != nil {
+		log.Fatalf("OIDC setup failed: %v", err)
+	}
 
 	gitClient := envrouter.NewGitClient(repositoryService, credentialsSecretService)
 
@@ -79,6 +87,13 @@ func main() {
 		"/api/v1/subscription",
 		"/api/v2/subscription",
 	})))
+	// guards /api/* when OIDC is enabled; always attaches the request actor
+	router.Use(authService.Middleware())
+
+	router.GET("/auth/login", authService.LoginHandler)
+	router.GET("/auth/callback", authService.CallbackHandler)
+	router.POST("/auth/logout", authService.LogoutHandler)
+	router.GET("/auth/userinfo", authService.UserinfoHandler)
 
 	server := &ServerInterfaceImpl{
 		repositoryService,
@@ -93,6 +108,9 @@ func main() {
 	}
 	router.GET("/api/v1/subscription", server.streamPods)
 	router.GET("/api/v2/subscription", server.streamV2)
+	router.GET("/api/v2/audit/refSwitches", func(c *gin.Context) {
+		c.JSON(200, auditLog.Find(c.Query("environment"), c.Query("application")))
+	})
 	router.GET("/healthz", func(c *gin.Context) {
 		c.Data(200, "text/plain", []byte("ok"))
 	})
@@ -259,7 +277,7 @@ func (s *ServerInterfaceImpl) PostApiV1RefBindings(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	result, err := s.refService.SaveBinding(&json)
+	result, err := s.refService.SaveBinding(&json, auth.ActorFromContext(c))
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
