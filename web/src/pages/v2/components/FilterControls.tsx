@@ -5,6 +5,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -73,18 +74,20 @@ export function FilterControls({
             </span>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-56">
-            <DropdownMenuLabel>Environment filter</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {environments.map((env) => (
-              <DropdownMenuCheckboxItem
-                key={env.name}
-                checked={selectedEnvironments.has(env.name)}
-                onCheckedChange={() => onToggleEnvironmentFilter(env.name)}
-                onSelect={(e) => e.preventDefault()}
-              >
-                {env.name}
-              </DropdownMenuCheckboxItem>
-            ))}
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Environment filter</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {environments.map((env) => (
+                <DropdownMenuCheckboxItem
+                  key={env.name}
+                  checked={selectedEnvironments.has(env.name)}
+                  onCheckedChange={() => onToggleEnvironmentFilter(env.name)}
+                  closeOnClick={false}
+                >
+                  {env.name}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
