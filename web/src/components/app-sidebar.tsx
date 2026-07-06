@@ -8,7 +8,6 @@ import {
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
-  Route,
   Sun,
 } from "lucide-react"
 import {
@@ -107,21 +106,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar {...props}>
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg" render={<Link to="/v2" />}>
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Route className="size-4" aria-hidden="true" />
-              </div>
-              <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold">EnvRouter</span>
-                <span className="truncate text-xs text-muted-foreground">
-                  Continuous Delivery
-                </span>
-              </div>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <div className="flex items-center gap-2 p-2">
+          <img src="/logo192.png" alt="" className="size-8 shrink-0 rounded-lg" />
+          <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
+            <span className="truncate font-semibold">EnvRouter</span>
+            <span className="truncate text-xs text-muted-foreground">Continuous Delivery</span>
+          </div>
+        </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
