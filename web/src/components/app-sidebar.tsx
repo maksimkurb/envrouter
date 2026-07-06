@@ -2,7 +2,7 @@ import * as React from "react"
 import { Link, useLocation } from "react-router-dom"
 import { useTheme } from "next-themes"
 import {
-  ArrowLeft,
+  History,
   Home,
   Folders,
   Monitor,
@@ -109,9 +109,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     <Sidebar {...props}>
       <SidebarHeader>
         {/* no own padding: header's p-2 gives the logo a constant 8px left
-            offset, which is also dead-center in the 48px collapsed rail —
-            so it never shifts during the collapse animation */}
-        <div className="flex items-center gap-2">
+            offset, which is also dead-center in the 48px collapsed rail.
+            fixed h-8 so hiding the (slightly taller) text can't shift the
+            logo vertically during the collapse animation */}
+        <div className="flex h-8 items-center gap-2">
           <img src="/logo.svg" alt="" className="h-8 w-8 max-w-none shrink-0" />
           <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
             <span className="truncate font-semibold">EnvRouter</span>
@@ -136,19 +137,19 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              <SidebarMenuItem className="group-data-[collapsible=icon]:hidden">
+                <SidebarMenuButton render={<Link to="/" />}>
+                  <History className="h-4 w-4" aria-hidden="true" />
+                  <span>Back to v1 (MUI)</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
+            <SidebarSeparator className="mx-0 mt-2 group-data-[collapsible=icon]:hidden" />
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>
-          <SidebarMenuItem className="group-data-[collapsible=icon]:hidden">
-            <SidebarMenuButton render={<Link to="/" />}>
-              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-              <span>Back to v1 (MUI)</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarSeparator className="group-data-[collapsible=icon]:hidden" />
           <SidebarMenuItem>
             <ThemeSelector />
           </SidebarMenuItem>
