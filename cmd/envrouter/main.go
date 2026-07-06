@@ -14,8 +14,29 @@ import (
 	"gitlab.com/jonasasx/envrouter/internal/utils"
 	"io"
 	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"sync/atomic"
 	"time"
 )
+
+// SSE connection accounting (package-level to avoid churning the positional
+// server struct literal); limit read once from env at startup.
+var (
+	activeSSE    atomic.Int64
+	maxSSEConns  = envInt("ENVROUTER_MAX_SSE_CONNECTIONS", 500)
+	maxBodyBytes = int64(envInt("ENVROUTER_MAX_BODY_BYTES", 1048576))
+)
+
+func envInt(key string, fallback int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return fallback
+}
 
 func init() {
 	log.Infof("Init")
@@ -78,6 +99,22 @@ func main() {
 	go gitScanJob.Scan()
 
 	router := gin.Default()
+
+	// Trust only explicitly listed proxies so c.ClientIP() can't be forged via
+	// a client-supplied X-Forwarded-For (audit log + webhook triggered-by IP).
+	if proxies := splitTrimmed(os.Getenv("ENVROUTER_TRUSTED_PROXIES")); len(proxies) > 0 {
+		if err := router.SetTrustedProxies(proxies); err != nil {
+			log.Fatalf("invalid ENVROUTER_TRUSTED_PROXIES: %v", err)
+		}
+		log.Infof("Trusting proxies: %v", proxies)
+	} else {
+		_ = router.SetTrustedProxies(nil)
+		log.Info("Trusting no proxies (using RemoteAddr for client IP)")
+	}
+
+	router.Use(securityHeaders())
+	router.Use(bodyLimit())
+
 	config := cors.DefaultConfig()
 	config.AllowAllOrigins = true
 	router.Use(cors.New(config))
@@ -96,15 +133,16 @@ func main() {
 	router.GET("/auth/userinfo", authService.UserinfoHandler)
 
 	server := &ServerInterfaceImpl{
-		repositoryService,
-		credentialsSecretService,
-		applicationService,
-		environmentService,
-		instanceService,
-		instancePodService,
-		refService,
-		eventsObserver,
-		gitStorage,
+		repositoryService:        repositoryService,
+		credentialsSecretService: credentialsSecretService,
+		applicationService:       applicationService,
+		environmentService:       environmentService,
+		instanceService:          instanceService,
+		instancePodService:       instancePodService,
+		refService:               refService,
+		eventsObserver:           eventsObserver,
+		gitStorage:               gitStorage,
+		authService:              authService,
 	}
 	router.GET("/api/v1/subscription", server.streamPods)
 	router.GET("/api/v2/subscription", server.streamV2)
@@ -134,6 +172,40 @@ type ServerInterfaceImpl struct {
 	refService               envrouter.RefService
 	eventsObserver           utils.Observer
 	gitStorage               envrouter.GitStorage
+	authService              *auth.Service
+}
+
+// splitTrimmed splits a comma list, trims spaces, and drops empties.
+func splitTrimmed(s string) []string {
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		if p := strings.TrimSpace(part); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func securityHeaders() gin.HandlerFunc {
+	hsts := os.Getenv("ENVROUTER_HSTS") == "true"
+	return func(c *gin.Context) {
+		h := c.Writer.Header()
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'")
+		if hsts {
+			h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
+		c.Next()
+	}
+}
+
+func bodyLimit() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBodyBytes)
+		c.Next()
+	}
 }
 
 func (s *ServerInterfaceImpl) GetApiV1Repositories(c *gin.Context) {
@@ -147,6 +219,10 @@ func (s *ServerInterfaceImpl) GetApiV1Repositories(c *gin.Context) {
 }
 
 func (s *ServerInterfaceImpl) PostApiV1Repositories(c *gin.Context) {
+	if !s.authService.CanConfigure(auth.ActorFromContext(c)) {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "not permitted to configure"})
+		return
+	}
 	var json api.Repository
 	if err := c.ShouldBindJSON(&json); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -162,6 +238,10 @@ func (s *ServerInterfaceImpl) PostApiV1Repositories(c *gin.Context) {
 }
 
 func (s *ServerInterfaceImpl) DeleteApiV1RepositoriesName(c *gin.Context, name string) {
+	if !s.authService.CanConfigure(auth.ActorFromContext(c)) {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "not permitted to configure"})
+		return
+	}
 	err := s.repositoryService.DeleteByName(name)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -180,6 +260,10 @@ func (s *ServerInterfaceImpl) GetApiV1CredentialsSecrets(c *gin.Context) {
 }
 
 func (s *ServerInterfaceImpl) PostApiV1CredentialsSecrets(c *gin.Context) {
+	if !s.authService.CanConfigure(auth.ActorFromContext(c)) {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "not permitted to configure"})
+		return
+	}
 	var json api.CredentialsSecretRequest
 	if err := c.ShouldBindJSON(&json); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -195,6 +279,10 @@ func (s *ServerInterfaceImpl) PostApiV1CredentialsSecrets(c *gin.Context) {
 }
 
 func (s *ServerInterfaceImpl) DeleteApiV1CredentialsSecretsName(c *gin.Context, name string) {
+	if !s.authService.CanConfigure(auth.ActorFromContext(c)) {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "not permitted to configure"})
+		return
+	}
 	err := s.credentialsSecretService.DeleteByName(name)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -213,6 +301,10 @@ func (s *ServerInterfaceImpl) GetApiV1Applications(c *gin.Context) {
 }
 
 func (s *ServerInterfaceImpl) PutApiV1ApplicationsName(c *gin.Context, name string) {
+	if !s.authService.CanConfigure(auth.ActorFromContext(c)) {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "not permitted to configure"})
+		return
+	}
 	var json api.Application
 	if err := c.ShouldBindJSON(&json); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -272,6 +364,10 @@ func (s *ServerInterfaceImpl) GetApiV1RefBindings(c *gin.Context, params api.Get
 }
 
 func (s *ServerInterfaceImpl) PostApiV1RefBindings(c *gin.Context) {
+	if !s.authService.CanDeploy(auth.ActorFromContext(c)) {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "not permitted to deploy"})
+		return
+	}
 	var json api.RefBinding
 	if err := c.ShouldBindJSON(&json); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -341,7 +437,24 @@ func (s *ServerInterfaceImpl) streamEvents(c *gin.Context, subscriber chan api.S
 
 // streamPods is the v1 stream: live deltas only (the v1 UI fetches its own
 // snapshot via the REST endpoints).
+// acquireSSE enforces the global SSE connection cap. Returns false (and writes
+// 503) when the limit is hit; on success the caller must defer releaseSSE.
+func acquireSSE(c *gin.Context) bool {
+	if activeSSE.Add(1) > int64(maxSSEConns) {
+		activeSSE.Add(-1)
+		c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "too many concurrent connections"})
+		return false
+	}
+	return true
+}
+
+func releaseSSE() { activeSSE.Add(-1) }
+
 func (s *ServerInterfaceImpl) streamPods(c *gin.Context) {
+	if !acquireSSE(c) {
+		return
+	}
+	defer releaseSSE()
 	subscriber, handler := s.subscribe(256)
 	defer s.eventsObserver.Unsubscribe(handler)
 	s.streamEvents(c, subscriber)
@@ -353,6 +466,10 @@ func (s *ServerInterfaceImpl) streamPods(c *gin.Context) {
 // is built, and deltas that are already in the snapshot re-apply
 // idempotently (events carry full objects).
 func (s *ServerInterfaceImpl) streamV2(c *gin.Context) {
+	if !acquireSSE(c) {
+		return
+	}
+	defer releaseSSE()
 	// larger buffer: it holds deltas while the snapshot is being built
 	subscriber, handler := s.subscribe(1024)
 	defer s.eventsObserver.Unsubscribe(handler)
@@ -377,7 +494,7 @@ func (s *ServerInterfaceImpl) buildSnapshot() (*api.Snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
-	refBindings, err := s.refService.FindAllBindings(nil, nil, nil)
+	refBindings, err := s.refService.SnapshotBindings()
 	if err != nil {
 		return nil, err
 	}
@@ -400,5 +517,6 @@ func (s *ServerInterfaceImpl) buildSnapshot() (*api.Snapshot, error) {
 		Instances:    instances,
 		InstancePods: instancePods,
 		RefsHeads:    refsHeads,
+		DefaultRef:   envrouter.DefaultRef,
 	}, nil
 }

@@ -34,6 +34,7 @@ type Actor struct {
 	FullName       string
 	Email          string
 	IP             string
+	Groups         []string
 }
 
 type Config struct {
@@ -47,6 +48,12 @@ type Config struct {
 	ClaimUserID   []string
 	ClaimFullName []string
 	ClaimEmail    []string
+	ClaimGroups   []string
+	// Group required at each authorization level; empty = allow all
+	// authenticated users at that level.
+	GroupView      string
+	GroupDeploy    string
+	GroupConfigure string
 }
 
 func getEnv(key, fallback string) string {
@@ -78,9 +85,13 @@ func ConfigFromEnv() Config {
 		// defaults work with Keycloak and Authelia out of the box; sub is
 		// always present per the OIDC spec, so the required field can't
 		// end up empty with default mapping
-		ClaimUserID:   splitClaims(getEnv("ENVROUTER_OIDC_CLAIM_USER_IDENTIFIER", "preferred_username,sub")),
-		ClaimFullName: splitClaims(getEnv("ENVROUTER_OIDC_CLAIM_FULLNAME", "name")),
-		ClaimEmail:    splitClaims(getEnv("ENVROUTER_OIDC_CLAIM_EMAIL", "email")),
+		ClaimUserID:    splitClaims(getEnv("ENVROUTER_OIDC_CLAIM_USER_IDENTIFIER", "preferred_username,sub")),
+		ClaimFullName:  splitClaims(getEnv("ENVROUTER_OIDC_CLAIM_FULLNAME", "name")),
+		ClaimEmail:     splitClaims(getEnv("ENVROUTER_OIDC_CLAIM_EMAIL", "email")),
+		ClaimGroups:    splitClaims(getEnv("ENVROUTER_OIDC_CLAIM_GROUPS", "groups")),
+		GroupView:      os.Getenv("ENVROUTER_OIDC_GROUP_VIEW"),
+		GroupDeploy:    os.Getenv("ENVROUTER_OIDC_GROUP_DEPLOY"),
+		GroupConfigure: os.Getenv("ENVROUTER_OIDC_GROUP_CONFIGURE"),
 	}
 }
 
@@ -122,6 +133,37 @@ func (s *Service) Enabled() bool {
 	return s.provider != nil
 }
 
+// permitted reports whether the actor may act at a level whose required group
+// is `group`. Auth disabled ⇒ always allowed; empty group ⇒ any authenticated
+// user; otherwise the actor must be a member.
+func (s *Service) permitted(a Actor, group string) bool {
+	if !s.Enabled() {
+		return true
+	}
+	if group == "" {
+		return true
+	}
+	return containsString(a.Groups, group)
+}
+
+func (s *Service) CanView(a Actor) bool      { return s.permitted(a, s.cfg.GroupView) }
+func (s *Service) CanDeploy(a Actor) bool    { return s.permitted(a, s.cfg.GroupDeploy) }
+func (s *Service) CanConfigure(a Actor) bool { return s.permitted(a, s.cfg.GroupConfigure) }
+
+// safeRedirect sanitizes the `rd` param to a same-site absolute path, defeating
+// open-redirect tricks including backslash normalization. Query string is
+// dropped.
+func safeRedirect(rd string) string {
+	if rd == "" || strings.ContainsAny(rd, "\\") {
+		return "/"
+	}
+	u, err := url.Parse(rd)
+	if err != nil || u.IsAbs() || u.Host != "" || !strings.HasPrefix(u.Path, "/") || strings.HasPrefix(u.Path, "//") || strings.HasPrefix(u.Path, "/auth/") {
+		return "/"
+	}
+	return u.Path
+}
+
 func resolveClaim(claims map[string]interface{}, fallbacks []string) string {
 	for _, name := range fallbacks {
 		if v, ok := claims[name].(string); ok && v != "" {
@@ -129,6 +171,36 @@ func resolveClaim(claims map[string]interface{}, fallbacks []string) string {
 		}
 	}
 	return ""
+}
+
+// resolveClaimSlice walks the fallback list and returns the first claim whose
+// value is a non-empty list of strings (OIDC claims arrive as []interface{}).
+func resolveClaimSlice(claims map[string]interface{}, fallbacks []string) []string {
+	for _, name := range fallbacks {
+		raw, ok := claims[name].([]interface{})
+		if !ok {
+			continue
+		}
+		var result []string
+		for _, e := range raw {
+			if s, ok := e.(string); ok && s != "" {
+				result = append(result, s)
+			}
+		}
+		if len(result) > 0 {
+			return result
+		}
+	}
+	return nil
+}
+
+func containsString(list []string, v string) bool {
+	for _, e := range list {
+		if e == v {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) actorFromIDToken(ctx context.Context, rawIDToken string) (Actor, error) {
@@ -144,6 +216,7 @@ func (s *Service) actorFromIDToken(ctx context.Context, rawIDToken string) (Acto
 		UserIdentifier: resolveClaim(claims, s.cfg.ClaimUserID),
 		FullName:       resolveClaim(claims, s.cfg.ClaimFullName),
 		Email:          resolveClaim(claims, s.cfg.ClaimEmail),
+		Groups:         resolveClaimSlice(claims, s.cfg.ClaimGroups),
 	}
 	if actor.UserIdentifier == "" {
 		return Actor{}, fmt.Errorf("none of the claims %v yielded a user identifier", s.cfg.ClaimUserID)
@@ -200,11 +273,7 @@ func (s *Service) LoginHandler(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/")
 		return
 	}
-	rd := c.Query("rd")
-	// only same-site absolute paths — no open redirect
-	if rd == "" || !strings.HasPrefix(rd, "/") || strings.HasPrefix(rd, "//") {
-		rd = "/"
-	}
+	rd := safeRedirect(c.Query("rd"))
 	nonce, err := randomNonce()
 	if err != nil {
 		c.AbortWithStatus(http.StatusInternalServerError)
@@ -230,10 +299,8 @@ func (s *Service) CallbackHandler(c *gin.Context) {
 		c.String(http.StatusBadRequest, "login state mismatch; start again at /auth/login")
 		return
 	}
-	rd, err := url.QueryUnescape(escapedRd)
-	if err != nil || !strings.HasPrefix(rd, "/") || strings.HasPrefix(rd, "//") {
-		rd = "/"
-	}
+	unescapedRd, _ := url.QueryUnescape(escapedRd)
+	rd := safeRedirect(unescapedRd)
 	token, err := s.oauth.Exchange(c.Request.Context(), c.Query("code"))
 	if err != nil {
 		log.Errorf("OIDC code exchange failed: %v", err)
@@ -245,9 +312,17 @@ func (s *Service) CallbackHandler(c *gin.Context) {
 		c.String(http.StatusBadGateway, "identity provider returned no id_token")
 		return
 	}
-	if _, err := s.actorFromIDToken(c.Request.Context(), rawIDToken); err != nil {
+	actor, err := s.actorFromIDToken(c.Request.Context(), rawIDToken)
+	if err != nil {
 		log.Errorf("OIDC id_token rejected: %v", err)
 		c.String(http.StatusUnauthorized, "identity token rejected: %v", err)
+		return
+	}
+	if !s.CanView(actor) {
+		c.SetSameSite(http.SameSiteLaxMode)
+		c.SetCookie(sessionCookie, "", -1, "/", "", !s.cfg.InsecureCookie, true)
+		c.SetCookie(stateCookie, "", -1, "/", "", !s.cfg.InsecureCookie, true)
+		c.String(http.StatusForbidden, "your account is not in a group permitted to use EnvRouter")
 		return
 	}
 	c.SetSameSite(http.SameSiteLaxMode)
@@ -266,7 +341,13 @@ func (s *Service) LogoutHandler(c *gin.Context) {
 
 func (s *Service) UserinfoHandler(c *gin.Context) {
 	if !s.Enabled() {
-		c.JSON(http.StatusOK, gin.H{"enabled": false, "authenticated": false})
+		// auth disabled: anonymous actor can do everything
+		c.JSON(http.StatusOK, gin.H{
+			"enabled":       false,
+			"authenticated": false,
+			"canDeploy":     s.CanDeploy(Actor{}),
+			"canConfigure":  s.CanConfigure(Actor{}),
+		})
 		return
 	}
 	if rawIDToken, err := c.Cookie(sessionCookie); err == nil {
@@ -277,9 +358,17 @@ func (s *Service) UserinfoHandler(c *gin.Context) {
 				"userIdentifier": actor.UserIdentifier,
 				"fullName":       actor.FullName,
 				"email":          actor.Email,
+				"groups":         actor.Groups,
+				"canDeploy":      s.CanDeploy(actor),
+				"canConfigure":   s.CanConfigure(actor),
 			})
 			return
 		}
 	}
-	c.JSON(http.StatusOK, gin.H{"enabled": true, "authenticated": false})
+	c.JSON(http.StatusOK, gin.H{
+		"enabled":       true,
+		"authenticated": false,
+		"canDeploy":     s.CanDeploy(Actor{}),
+		"canConfigure":  s.CanConfigure(Actor{}),
+	})
 }

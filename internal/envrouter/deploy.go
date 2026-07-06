@@ -1,6 +1,7 @@
 package envrouter
 
 import (
+	"net/url"
 	"strings"
 
 	"gitlab.com/jonasasx/envrouter/internal/envrouter/auth"
@@ -37,6 +38,7 @@ func (d *deployService) Deploy(applicationName string, ref string, meta DeployMe
 	}
 	if application.Webhook != nil {
 		webhook := *application.Webhook
+		webhook = strings.ReplaceAll(webhook, "{ref_urlencoded}", url.QueryEscape(ref))
 		webhook = strings.ReplaceAll(webhook, "{ref}", ref)
 		// GitLab pipeline-trigger variables; empty values when auth is disabled
 		variables := map[string]string{

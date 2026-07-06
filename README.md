@@ -45,6 +45,26 @@ EnvRouter can require login through any OIDC discovery-compliant provider
 | `ENVROUTER_OIDC_CLAIM_FULLNAME` | `name` | Claim fallback list for the display name |
 | `ENVROUTER_OIDC_CLAIM_EMAIL` | `email` | Claim fallback list for the email |
 | `ENVROUTER_OIDC_INSECURE_COOKIE` | `false` | Set `true` for plain-HTTP dev setups |
+| `ENVROUTER_OIDC_CLAIM_GROUPS` | `groups` | Claim fallback list for the user's group membership (string array) |
+| `ENVROUTER_OIDC_GROUP_VIEW` | *(empty = any authenticated user)* | Group required to log in / view. Set it to restrict access to members only |
+| `ENVROUTER_OIDC_GROUP_DEPLOY` | *(empty = any authenticated user)* | Group required to change branch bindings (deploy) |
+| `ENVROUTER_OIDC_GROUP_CONFIGURE` | *(empty = any authenticated user)* | Group required to edit repositories, applications and credential secrets — and thus webhook URLs |
+
+Authorization is group-based and layered: **view** gates login (a user outside
+the group is rejected at the callback with 403), **deploy** gates branch
+switches, **configure** gates repository/application/secret editing. An empty
+group variable means "allow all authenticated users" at that level; setting it
+enforces strict membership. Restricting `configure` is the primary mitigation
+for webhook SSRF, since only that level can set webhook URLs.
+
+### Security & limits
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `ENVROUTER_TRUSTED_PROXIES` | *(empty = trust none)* | Comma-separated IPs/CIDRs (IPv4 & IPv6) of reverse proxies whose `X-Forwarded-For` is honored for client IP. Empty trusts no proxy and uses the socket `RemoteAddr` — prevents IP spoofing of the audit log and webhook triggered-by IP |
+| `ENVROUTER_MAX_BODY_BYTES` | `1048576` | Max request body size in bytes (1 MiB) |
+| `ENVROUTER_MAX_SSE_CONNECTIONS` | `500` | Max concurrent SSE subscription connections; excess get HTTP 503 |
+| `ENVROUTER_HSTS` | `false` | Set `true` to emit `Strict-Transport-Security` (enable only behind HTTPS) |
 
 When auth is enabled every `/api/*` route requires a session (the UI redirects
 to the provider automatically). Every branch switch is recorded in an
