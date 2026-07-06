@@ -201,7 +201,12 @@ export const ServiceRow = memo(function ServiceRow({
                   className="absolute top-full left-0 z-50 mt-1 w-full rounded-md border bg-popover text-popover-foreground shadow-md"
                 >
                   {orderedRefs.map((knownRef) => (
-                    <CommandItem key={knownRef.ref} value={knownRef.ref} onSelect={commitRef}>
+                    <CommandItem
+                      key={knownRef.ref}
+                      value={knownRef.ref}
+                      onSelect={commitRef}
+                      title={knownRef.ref}
+                    >
                       <span className="min-w-0 flex-1 truncate">{knownRef.ref}</span>
                       {knownRef.commit?.sha && (
                         <span className="ml-2 font-mono text-xs text-muted-foreground">
@@ -211,7 +216,7 @@ export const ServiceRow = memo(function ServiceRow({
                     </CommandItem>
                   ))}
                   {isCustomRef && (
-                    <CommandItem value={ref.trim()} onSelect={commitRef}>
+                    <CommandItem value={ref.trim()} onSelect={commitRef} title={ref.trim()}>
                       {ref.trim()}
                       <span className="ml-1 text-muted-foreground">(custom ref)</span>
                     </CommandItem>
