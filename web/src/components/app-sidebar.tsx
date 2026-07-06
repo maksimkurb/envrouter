@@ -116,34 +116,51 @@ function accessMode(auth: AuthInfo): string {
   return "View only"
 }
 
-// Card with avatar + username + access mode + logout. Expanded-only: the
-// whole block (logout included) is hidden in the collapsed icon rail.
+// "Max Kurb" -> "MK"; single token -> first two letters.
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
+  return name.trim().slice(0, 2).toUpperCase()
+}
+
+// Card with avatar + name + access mode + logout. Mirrors SidebarMenuButton's
+// collapse mechanics: constant p-2 + overflow-hidden, the box shrinking to
+// size-8 in the icon rail. The avatar is the first child (left edge fixed at
+// 8px), and it shrinks in place from size-8 to size-4 — so it never slides
+// sideways, it just scales down and lands centered (8+16+8=32). Text + logout
+// clip and are hidden in collapsed.
 function UserBlock({ auth }: { auth: AuthInfo }) {
-  const avatar = useGravatar(auth.email, 64)
+  const avatar = useGravatar(auth.email, 96)
+  const [imgFailed, setImgFailed] = React.useState(false)
   const logout = () => {
     axios.post(`${BASE_PATH}/auth/logout`).finally(() => {
       // the auth gate redirects to the login flow on reload
       window.location.reload()
     })
   }
-  // avatar shows in both states; card chrome + text + logout are
-  // expanded-only, so collapsed shows just a centered avatar in the rail
-  const title = [auth.fullName, auth.email].filter(Boolean).join(" · ") || auth.userIdentifier
+  const displayName = auth.fullName || auth.userIdentifier || "User"
   return (
-    <div className="mb-1 flex items-center gap-2 rounded-lg border bg-card p-2 group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:justify-center">
-      {avatar ? (
-        <img src={avatar} alt="" title={title} className="size-8 shrink-0 rounded-full bg-muted" />
+    <div className="mb-1 flex w-full items-center gap-2 overflow-hidden rounded-lg border bg-card p-2 transition-[width,height,padding] group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-1.5! group-data-[collapsible=icon]:border-transparent group-data-[collapsible=icon]:bg-transparent">
+      {avatar && !imgFailed ? (
+        <img
+          src={avatar}
+          alt=""
+          title={displayName}
+          onError={() => setImgFailed(true)}
+          className="size-8 shrink-0 rounded-full bg-muted object-cover transition-[width,height] group-data-[collapsible=icon]:size-5"
+        />
       ) : (
         <div
-          title={title}
-          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted"
+          title={displayName}
+          aria-hidden="true"
+          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold leading-none text-primary transition-[width,height] group-data-[collapsible=icon]:size-5 group-data-[collapsible=icon]:text-[9px]"
         >
-          <UserRound className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          {initialsOf(displayName)}
         </div>
       )}
       <div className="grid min-w-0 flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
-        <span className="truncate text-sm font-medium" title={title}>
-          {auth.userIdentifier}
+        <span className="truncate text-sm font-medium" title={displayName}>
+          {displayName}
         </span>
         <span className="truncate text-xs text-muted-foreground">{accessMode(auth)}</span>
       </div>

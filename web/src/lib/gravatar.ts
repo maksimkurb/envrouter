@@ -9,9 +9,9 @@ async function sha256Hex(input: string): Promise<string> {
 }
 
 // Gravatar accepts a SHA-256 hex of the lowercased/trimmed email (modern API);
-// SubtleCrypto avoids pulling in an MD5 dependency. `identicon` gives every
-// user a generated avatar when they have no Gravatar. Returns undefined until
-// the async hash resolves (or when there's no email).
+// SubtleCrypto avoids pulling in an MD5 dependency. `d=404` makes Gravatar
+// return 404 when the user has no avatar, so the caller can fall back to
+// initials. Returns undefined until the async hash resolves (or no email).
 export function useGravatar(email: string | undefined, size = 64): string | undefined {
   const [url, setUrl] = useState<string>()
   useEffect(() => {
@@ -23,7 +23,7 @@ export function useGravatar(email: string | undefined, size = 64): string | unde
     let cancelled = false
     sha256Hex(normalized)
       .then((hash) => {
-        if (!cancelled) setUrl(`https://www.gravatar.com/avatar/${hash}?s=${size}&d=identicon`)
+        if (!cancelled) setUrl(`https://www.gravatar.com/avatar/${hash}?s=${size}&d=404`)
       })
       .catch(() => {
         if (!cancelled) setUrl(undefined)
