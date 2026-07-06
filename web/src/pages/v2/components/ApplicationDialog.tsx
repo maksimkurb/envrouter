@@ -105,8 +105,14 @@ export function ApplicationDialog({ application, repositories, onClose }: Applic
               value={webhook}
               onChange={(e) => setWebhook(e.target.value)}
               disabled={saving}
-              placeholder="https://ci.example.com/hooks/deploy"
+              placeholder="https://ci.example.com/hooks/deploy?branch={ref}"
+              aria-describedby="app-webhook-hint"
             />
+            <p id="app-webhook-hint" className="text-xs text-muted-foreground">
+              Called with POST on every branch change. Substitutions:{' '}
+              <code className="rounded bg-muted px-1 font-mono">{'{ref}'}</code> — the branch being
+              deployed.
+            </p>
           </div>
         </div>
         <DialogFooter>
