@@ -2,7 +2,10 @@ import {WithStyles, withStyles} from "@mui/styles";
 import EditIcon from '@mui/icons-material/Edit';
 import {Application, DefaultApiFp, Repository} from "../../../../axios";
 import {Theme} from "@mui/material/styles";
-import {DataGrid, GridActionsCellItem, GridColumns,} from '@mui/x-data-grid';
+import {DataGrid, GridActionsCellItem as MuiGridActionsCellItem, GridColumns,} from '@mui/x-data-grid';
+
+// MUI v5 x-data-grid types clash with React 19 typings; legacy v1 UI only
+const GridActionsCellItem = MuiGridActionsCellItem as any;
 import {Container, Paper} from "@mui/material";
 import {useEffect, useState} from "react";
 import {OptionsObject, useSnackbar} from "notistack";
@@ -85,7 +88,7 @@ export default withStyles(styles)(function ApplicationGridComponent(props: Appli
                         icon={<EditIcon/>}
                         label="Edit"
                         className={classes.textPrimary}
-                        onClick={(e) => {
+                        onClick={() => {
                             setEditingApplication(row as Application)
                         }}
                         color="inherit"

@@ -1,5 +1,8 @@
 import {Button, Container, Paper} from "@mui/material";
-import {DataGrid, GridActionsCellItem, GridColumns, GridToolbarContainer,} from '@mui/x-data-grid';
+import {DataGrid, GridActionsCellItem as MuiGridActionsCellItem, GridColumns, GridToolbarContainer,} from '@mui/x-data-grid';
+
+// MUI v5 x-data-grid types clash with React 19 typings; legacy v1 UI only
+const GridActionsCellItem = MuiGridActionsCellItem as any;
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
@@ -115,7 +118,7 @@ export default withStyles(styles)(function RepositoryGridComponent(props: Reposi
                         icon={<EditIcon/>}
                         label="Edit"
                         className={classes.textPrimary}
-                        onClick={(e) => {
+                        onClick={() => {
                             setEditingRepository(row as Repository)
                         }}
                         color="inherit"

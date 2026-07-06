@@ -65,12 +65,12 @@ export function FilterControls({
       </div>
       <div>
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="min-w-48 max-w-md justify-start">
-              <span className="truncate">
-                {selectedEnvironments.size === 0 ? 'All environments' : selectedEnvNames}
-              </span>
-            </Button>
+          <DropdownMenuTrigger
+            render={<Button variant="outline" className="min-w-48 max-w-md justify-start" />}
+          >
+            <span className="truncate">
+              {selectedEnvironments.size === 0 ? 'All environments' : selectedEnvNames}
+            </span>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-56">
             <DropdownMenuLabel>Environment filter</DropdownMenuLabel>

@@ -1,6 +1,7 @@
 import { Application, Instance, InstancePod, Ref } from '@/axios'
-import { Badge } from '@/components/ui/badge'
+import { badgeVariants } from '@/components/ui/badge'
 import { SheetTrigger } from '@/components/ui/sheet'
+import { cn } from '@/lib/utils'
 import PodDetailsDialog from './PodDetailsDialog'
 
 interface InstanceBadgeProps {
@@ -20,12 +21,13 @@ export default function InstanceBadge({ application, instance, instancePods, ref
       application={application}
       refsHeads={refsHeads}
     >
-      <SheetTrigger asChild>
-        <Badge asChild variant="outline" className="cursor-pointer">
-          <button type="button" title={`${summary} — click for pod details`} aria-label={`${summary} — show pod details`}>
-            {instance.name}: {podCount}, {instance.ref}
-          </button>
-        </Badge>
+      {/* SheetTrigger renders a native button; badgeVariants gives it badge styling */}
+      <SheetTrigger
+        title={`${summary} — click for pod details`}
+        aria-label={`${summary} — show pod details`}
+        className={cn(badgeVariants({ variant: 'outline' }), 'cursor-pointer')}
+      >
+        {instance.name}: {podCount}, {instance.ref}
       </SheetTrigger>
     </PodDetailsDialog>
   )
