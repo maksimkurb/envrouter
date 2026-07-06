@@ -4,7 +4,7 @@ import { Application, DefaultApiFp, Instance, InstancePod, Ref, RefBinding } fro
 import { TableCell, TableRow } from '@/components/ui/table'
 import { Command, CommandItem, CommandList } from '@/components/ui/command'
 import { Badge } from '@/components/ui/badge'
-import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
+import { Loader2, Package, PackageOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import { PodRow } from './PodRow'
@@ -126,12 +126,13 @@ export const ServiceRow = memo(function ServiceRow({
               aria-expanded={expanded}
               aria-label={`${expanded ? 'Collapse' : 'Expand'} pods of ${application.name} in ${environmentName}`}
               onClick={() => setExpanded((e) => !e)}
-              className="flex items-center justify-center rounded p-1 hover:bg-muted-foreground/10"
+              // indented relative to the env-level chevron to show hierarchy
+              className="ml-4 flex items-center justify-center rounded p-1 hover:bg-muted-foreground/10"
             >
               {expanded ? (
-                <ChevronDown className="h-4 w-4" aria-hidden="true" />
+                <PackageOpen className="h-4 w-4 fill-primary/15 text-primary" aria-hidden="true" />
               ) : (
-                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                <Package className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
               )}
             </button>
           )}
