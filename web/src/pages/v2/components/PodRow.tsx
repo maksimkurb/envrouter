@@ -221,7 +221,7 @@ export function PodRow({ pod, application }: { pod: InstancePod; application: Ap
               aria-label={`Copy full commit hash of pod ${pod.name}`}
               className="cursor-pointer text-muted-foreground hover:text-foreground hover:underline"
             >
-              {` @ ${copied ? 'copied!' : shortSha}`}
+              {` ${copied ? 'copied!' : shortSha}`}
             </button>
           )}
         </div>
