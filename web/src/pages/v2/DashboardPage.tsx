@@ -90,7 +90,7 @@ export default function DashboardPage() {
     loading,
     error,
     sseError,
-    refetch,
+    reconnect,
   } = useDashboardData()
 
   // Environment expand/collapse state
@@ -153,7 +153,7 @@ export default function DashboardPage() {
       )}
 
       {error ? (
-        <ErrorState onRetry={refetch} />
+        <ErrorState onRetry={reconnect} />
       ) : loading ? (
         <LoadingSkeleton />
       ) : !hasResults ? (

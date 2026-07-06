@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Application, DefaultApiFp, Environment, Instance, InstancePod, Ref, RefBinding } from '@/axios'
-import { SSEvent } from '@/sse/api'
+import { useCallback, useEffect, useState } from 'react'
+import { Application, Environment, Instance, InstancePod, Ref, RefBinding } from '@/axios'
+import { Snapshot, SSEvent } from '@/sse/api'
 import { useSSESubscription } from './useSSESubscription'
 
-const api = DefaultApiFp()
+const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name)
 
+// All dashboard data arrives over one SSE stream: a full Snapshot on every
+// (re)connect, then incremental deltas — no REST snapshot, no races.
 export function useDashboardData() {
   const [environments, setEnvironments] = useState<Environment[]>([])
   const [applications, setApplications] = useState<Application[]>([])
@@ -14,8 +16,6 @@ export function useDashboardData() {
   const [refsHeads, setRefsHeads] = useState<Map<string, Ref>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  // guards against an older snapshot response overwriting a newer one
-  const fetchSeq = useRef(0)
 
   const updateRefBinding = useCallback((newRefBinding: RefBinding) => {
     const key = `${newRefBinding.environment}-${newRefBinding.application}`
@@ -28,6 +28,24 @@ export function useDashboardData() {
 
   const onSSEvent = useCallback((e: SSEvent) => {
     switch (e.itemType) {
+      case 'Snapshot': {
+        const snapshot = e.item as Snapshot
+        setEnvironments([...(snapshot.environments ?? [])].sort(byName))
+        setApplications([...(snapshot.applications ?? [])].sort(byName))
+        setRefBindings(
+          new Map((snapshot.refBindings ?? []).map((r) => [`${r.environment}-${r.application}`, r]))
+        )
+        setInstances(
+          new Map(
+            (snapshot.instances ?? []).map((i) => [`${i.environment}-${i.application}-${i.name}`, i])
+          )
+        )
+        setInstancePods(new Map((snapshot.instancePods ?? []).map((p) => [p.name, p])))
+        setRefsHeads(new Map((snapshot.refsHeads ?? []).map((r) => [`${r.repository}-${r.ref}`, r])))
+        setLoading(false)
+        setError(null)
+        break
+      }
       case 'InstancePod': {
         const instancePod = e.item as InstancePod
         setInstancePods((current) => {
@@ -86,56 +104,15 @@ export function useDashboardData() {
     }
   }, [])
 
-  const fetchData = useCallback(() => {
-    const seq = ++fetchSeq.current
-    setError(null)
-    Promise.all([
-      api.apiV1EnvironmentsGet().then((request) => request()),
-      api.apiV1ApplicationsGet().then((request) => request()),
-      api.apiV1RefBindingsGet().then((request) => request()),
-      api.apiV1InstancesGet().then((request) => request()),
-      api.apiV1InstancePodsGet().then((request) => request()),
-      api.apiV1GitRefsGet().then((request) => request()),
-    ])
-      .then(([envs, apps, refs, instances, instancePods, refsHeads]) => {
-        if (seq !== fetchSeq.current) return
-        const refBindingsMap = new Map(
-          refs.data.map((r) => [`${r.environment}-${r.application}`, r])
-        )
-        const instancesMap = new Map(
-          instances.data.map((i) => [`${i.environment}-${i.application}-${i.name}`, i])
-        )
-        const instancePodsMap = new Map(
-          instancePods.data.map((p) => [p.name, p])
-        )
-        const refsHeadsMap = new Map(
-          refsHeads.data.map((r) => [`${r.repository}-${r.ref}`, r])
-        )
+  const { error: sseError, reconnect } = useSSESubscription(onSSEvent)
 
-        setRefBindings(refBindingsMap)
-        setEnvironments(envs.data.sort((a, b) => a.name.localeCompare(b.name)))
-        setApplications(apps.data.sort((a, b) => a.name.localeCompare(b.name)))
-        setInstances(instancesMap)
-        setInstancePods(instancePodsMap)
-        setRefsHeads(refsHeadsMap)
-        setLoading(false)
-      })
-      .catch((err) => {
-        if (seq !== fetchSeq.current) return
-        console.error('Failed to load dashboard data:', err)
-        setLoading(false)
-        setError('Failed to load dashboard data')
-      })
-  }, [])
-
-  // The server replays a full state snapshot into every new SSE
-  // subscription, so between fetchData() and that replay any wholesale
-  // replacement here converges to current state.
-  const { error: sseError } = useSSESubscription(onSSEvent, fetchData)
-
+  // stream down while we still have nothing to show -> full error panel
+  // (post-load drops surface as the reconnecting banner instead)
   useEffect(() => {
-    fetchData()
-  }, [fetchData])
+    if (sseError && loading) {
+      setError('Failed to connect to EnvRouter')
+    }
+  }, [sseError, loading])
 
   return {
     environments,
@@ -148,6 +125,6 @@ export function useDashboardData() {
     loading,
     error,
     sseError,
-    refetch: fetchData,
+    reconnect,
   }
 }

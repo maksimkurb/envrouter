@@ -1,42 +1,39 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { SSEvent } from '@/sse/api'
 import { BASE_PATH } from '@/axios/base'
 
 type SSEEventHandler = (event: SSEvent) => void
 
 /**
- * Centralized SSE subscription hook to prevent duplicate connections
- * and provide consistent error handling across the application.
+ * Subscription to the v2 stream (/api/v2/subscription): the server sends a
+ * full Snapshot event first, then live deltas — so every (re)connect is a
+ * complete resync by construction.
  *
- * Handlers are kept in refs so changing identities never tear down the
- * connection. `onReconnect` fires after a dropped connection is
- * re-established — use it to resync state missed while offline.
+ * The handler is kept in a ref so changing identities never tear down the
+ * connection. `reconnect()` forces an immediate fresh connection (used by
+ * the error panel's Retry).
  */
-export function useSSESubscription(onEvent: SSEEventHandler, onReconnect?: () => void) {
+export function useSSESubscription(onEvent: SSEEventHandler) {
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  const [nonce, setNonce] = useState(0)
   const onEventRef = useRef(onEvent)
   onEventRef.current = onEvent
-  const onReconnectRef = useRef(onReconnect)
-  onReconnectRef.current = onReconnect
+
+  const reconnect = useCallback(() => setNonce((n) => n + 1), [])
 
   useEffect(() => {
     let eventSource: EventSource | null = null
     let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
     let disposed = false
-    let wasDropped = false
 
     const connect = () => {
       if (disposed) return
-      eventSource = new EventSource(`${BASE_PATH}/api/v1/subscription`)
+      eventSource = new EventSource(`${BASE_PATH}/api/v2/subscription`)
 
       eventSource.onopen = () => {
         setConnected(true)
         setError(null)
-        if (wasDropped) {
-          wasDropped = false
-          onReconnectRef.current?.()
-        }
       }
 
       eventSource.onmessage = (e) => {
@@ -51,7 +48,6 @@ export function useSSESubscription(onEvent: SSEEventHandler, onReconnect?: () =>
       eventSource.onerror = () => {
         setConnected(false)
         setError(new Error('SSE connection error'))
-        wasDropped = true
         eventSource?.close()
 
         // Attempt reconnection after 5 seconds
@@ -73,7 +69,7 @@ export function useSSESubscription(onEvent: SSEEventHandler, onReconnect?: () =>
         eventSource.close()
       }
     }
-  }, [])
+  }, [nonce])
 
-  return { connected, error }
+  return { connected, error, reconnect }
 }

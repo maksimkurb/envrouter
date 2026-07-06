@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"github.com/gin-contrib/cors"
+	"github.com/gin-contrib/gzip"
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -72,6 +73,12 @@ func main() {
 	config := cors.DefaultConfig()
 	config.AllowAllOrigins = true
 	router.Use(cors.New(config))
+	// gzip REST payloads (large repetitive JSON compresses ~10x); SSE streams
+	// are excluded — gzip buffering would break per-event flushing
+	router.Use(gzip.Gzip(gzip.DefaultCompression, gzip.WithExcludedPaths([]string{
+		"/api/v1/subscription",
+		"/api/v2/subscription",
+	})))
 
 	server := &ServerInterfaceImpl{
 		repositoryService,
@@ -85,6 +92,7 @@ func main() {
 		gitStorage,
 	}
 	router.GET("/api/v1/subscription", server.streamPods)
+	router.GET("/api/v2/subscription", server.streamV2)
 	router.GET("/healthz", func(c *gin.Context) {
 		c.Data(200, "text/plain", []byte("ok"))
 	})
@@ -116,7 +124,7 @@ func (s *ServerInterfaceImpl) GetApiV1Repositories(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	} else {
-		c.IndentedJSON(200, result)
+		c.JSON(200, result)
 	}
 }
 
@@ -131,7 +139,7 @@ func (s *ServerInterfaceImpl) PostApiV1Repositories(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	} else {
-		c.IndentedJSON(200, result)
+		c.JSON(200, result)
 	}
 }
 
@@ -149,7 +157,7 @@ func (s *ServerInterfaceImpl) GetApiV1CredentialsSecrets(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	} else {
-		c.IndentedJSON(200, result)
+		c.JSON(200, result)
 	}
 }
 
@@ -164,7 +172,7 @@ func (s *ServerInterfaceImpl) PostApiV1CredentialsSecrets(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	} else {
-		c.IndentedJSON(200, result)
+		c.JSON(200, result)
 	}
 }
 
@@ -182,7 +190,7 @@ func (s *ServerInterfaceImpl) GetApiV1Applications(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	} else {
-		c.IndentedJSON(200, result)
+		c.JSON(200, result)
 	}
 }
 
@@ -201,7 +209,7 @@ func (s *ServerInterfaceImpl) PutApiV1ApplicationsName(c *gin.Context, name stri
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	} else {
-		c.IndentedJSON(200, result)
+		c.JSON(200, result)
 	}
 }
 
@@ -211,7 +219,7 @@ func (s *ServerInterfaceImpl) GetApiV1Environments(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	} else {
-		c.IndentedJSON(200, result)
+		c.JSON(200, result)
 	}
 }
 
@@ -221,7 +229,7 @@ func (s *ServerInterfaceImpl) GetApiV1Instances(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	} else {
-		c.IndentedJSON(200, result)
+		c.JSON(200, result)
 	}
 }
 
@@ -231,7 +239,7 @@ func (s *ServerInterfaceImpl) GetApiV1InstancePods(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	} else {
-		c.IndentedJSON(200, result)
+		c.JSON(200, result)
 	}
 }
 
@@ -241,7 +249,7 @@ func (s *ServerInterfaceImpl) GetApiV1RefBindings(c *gin.Context, params api.Get
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	} else {
-		c.IndentedJSON(200, result)
+		c.JSON(200, result)
 	}
 }
 
@@ -256,7 +264,7 @@ func (s *ServerInterfaceImpl) PostApiV1RefBindings(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	} else {
-		c.IndentedJSON(200, result)
+		c.JSON(200, result)
 	}
 }
 
@@ -266,7 +274,7 @@ func (s *ServerInterfaceImpl) GetApiV1GitRepositoriesRepositoryNameCommitsSha(c 
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	} else {
-		c.IndentedJSON(200, result)
+		c.JSON(200, result)
 	}
 }
 
@@ -276,15 +284,16 @@ func (s *ServerInterfaceImpl) GetApiV1GitRefs(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	} else {
-		c.IndentedJSON(200, result)
+		c.JSON(200, result)
 	}
 }
 
-func (s *ServerInterfaceImpl) streamPods(c *gin.Context) {
-	// Buffered channel + non-blocking send: a slow or gone client drops
-	// events instead of blocking publishers (git scanner, k8s informers).
-	subscriber := make(chan api.SSEvent, 256)
-	handler := utils.ObserverEventHandlerFuncs{
+// subscribe registers a buffered, non-blocking event subscriber: a slow or
+// gone client drops events instead of blocking publishers (git scanner,
+// k8s informers). Caller must Unsubscribe the returned handler.
+func (s *ServerInterfaceImpl) subscribe(buffer int) (chan api.SSEvent, *utils.ObserverEventHandlerFuncs) {
+	subscriber := make(chan api.SSEvent, buffer)
+	handler := &utils.ObserverEventHandlerFuncs{
 		EventFunc: func(oldObj interface{}, newObj interface{}) {
 			select {
 			case subscriber <- newObj.(api.SSEvent):
@@ -292,21 +301,14 @@ func (s *ServerInterfaceImpl) streamPods(c *gin.Context) {
 			}
 		},
 	}
-	s.eventsObserver.Subscribe(&handler)
-	defer s.eventsObserver.Unsubscribe(&handler)
+	s.eventsObserver.Subscribe(handler)
+	return subscriber, handler
+}
 
-	// Snapshot is collected after Subscribe so a client can never miss an
-	// update that happened between its initial GETs and this subscription.
-	snapshot := s.collectSnapshot()
-
+func (s *ServerInterfaceImpl) streamEvents(c *gin.Context, subscriber chan api.SSEvent) {
 	ticker := time.NewTicker(time.Second * 10)
 	defer ticker.Stop()
 	c.Stream(func(w io.Writer) bool {
-		if len(snapshot) > 0 {
-			c.SSEvent("", snapshot[0])
-			snapshot = snapshot[1:]
-			return true
-		}
 		select {
 		case event := <-subscriber:
 			c.SSEvent("", event)
@@ -319,35 +321,66 @@ func (s *ServerInterfaceImpl) streamPods(c *gin.Context) {
 	})
 }
 
-func (s *ServerInterfaceImpl) collectSnapshot() []api.SSEvent {
-	var events []api.SSEvent
-	if instances, err := s.instanceService.FindAll(); err == nil {
-		for _, v := range instances {
-			events = append(events, api.SSEvent{ItemType: "Instance", Item: v, Event: "UPDATED"})
-		}
-	} else {
-		log.Errorf("SSE snapshot: instances: %v", err)
+// streamPods is the v1 stream: live deltas only (the v1 UI fetches its own
+// snapshot via the REST endpoints).
+func (s *ServerInterfaceImpl) streamPods(c *gin.Context) {
+	subscriber, handler := s.subscribe(256)
+	defer s.eventsObserver.Unsubscribe(handler)
+	s.streamEvents(c, subscriber)
+}
+
+// streamV2 delivers the complete dashboard state as ONE Snapshot event and
+// then live deltas on the same ordered stream — no REST snapshot, no
+// cross-channel races: the subscription is registered before the snapshot
+// is built, and deltas that are already in the snapshot re-apply
+// idempotently (events carry full objects).
+func (s *ServerInterfaceImpl) streamV2(c *gin.Context) {
+	// larger buffer: it holds deltas while the snapshot is being built
+	subscriber, handler := s.subscribe(1024)
+	defer s.eventsObserver.Unsubscribe(handler)
+
+	snapshot, err := s.buildSnapshot()
+	if err != nil {
+		// closing makes the client's auto-reconnect retry
+		log.Errorf("SSE v2 snapshot: %v", err)
+		return
 	}
-	if pods, err := s.instancePodService.FindAll(); err == nil {
-		for _, v := range pods {
-			events = append(events, api.SSEvent{ItemType: "InstancePod", Item: v, Event: "UPDATED"})
-		}
-	} else {
-		log.Errorf("SSE snapshot: instance pods: %v", err)
+	c.SSEvent("", api.SSEvent{ItemType: "Snapshot", Item: snapshot, Event: "UPDATED"})
+	c.Writer.Flush()
+	s.streamEvents(c, subscriber)
+}
+
+func (s *ServerInterfaceImpl) buildSnapshot() (*api.Snapshot, error) {
+	environments, err := s.environmentService.FindAll()
+	if err != nil {
+		return nil, err
 	}
-	if refs, err := s.gitStorage.GetAllRefsHeads(); err == nil {
-		for _, v := range refs {
-			events = append(events, api.SSEvent{ItemType: "RefHead", Item: v, Event: "UPDATED"})
-		}
-	} else {
-		log.Errorf("SSE snapshot: refs: %v", err)
+	applications, err := s.applicationService.FindAll()
+	if err != nil {
+		return nil, err
 	}
-	if bindings, err := s.refService.FindAllBindings(nil, nil, nil); err == nil {
-		for _, v := range bindings {
-			events = append(events, api.SSEvent{ItemType: "RefBinding", Item: v, Event: "UPDATED"})
-		}
-	} else {
-		log.Errorf("SSE snapshot: ref bindings: %v", err)
+	refBindings, err := s.refService.FindAllBindings(nil, nil, nil)
+	if err != nil {
+		return nil, err
 	}
-	return events
+	instances, err := s.instanceService.FindAll()
+	if err != nil {
+		return nil, err
+	}
+	instancePods, err := s.instancePodService.FindAll()
+	if err != nil {
+		return nil, err
+	}
+	refsHeads, err := s.gitStorage.GetAllRefsHeads()
+	if err != nil {
+		return nil, err
+	}
+	return &api.Snapshot{
+		Environments: environments,
+		Applications: applications,
+		RefBindings:  refBindings,
+		Instances:    instances,
+		InstancePods: instancePods,
+		RefsHeads:    refsHeads,
+	}, nil
 }

@@ -7,6 +7,7 @@ require (
 	github.com/getkin/kin-openapi v0.87.0
 	github.com/ghodss/yaml v1.0.0
 	github.com/gin-contrib/cors v1.7.7
+	github.com/gin-contrib/gzip v1.2.6
 	github.com/gin-contrib/static v1.1.6
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-git/go-git/v5 v5.17.2
