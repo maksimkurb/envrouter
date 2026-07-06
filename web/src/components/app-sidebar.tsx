@@ -2,6 +2,7 @@ import * as React from "react"
 import { Link, useLocation } from "react-router-dom"
 import { useTheme } from "next-themes"
 import {
+  ArrowLeft,
   Home,
   Folders,
   Monitor,
@@ -137,6 +138,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton tooltip="Back to v1 (MUI)" render={<Link to="/" />}>
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              <span>Back to v1 (MUI)</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <ThemeSelector />
           </SidebarMenuItem>

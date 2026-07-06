@@ -129,6 +129,7 @@ export default function DashboardPage() {
     <div className="space-y-4">
       <FilterControls
         environments={environments}
+        applications={applications}
         selectedEnvironments={selectedEnvironments}
         selectedEnvNames={selectedEnvNames}
         serviceSearchQuery={serviceSearchQuery}
