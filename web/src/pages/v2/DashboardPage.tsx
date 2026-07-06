@@ -99,15 +99,16 @@ export default function DashboardPage() {
   // Filter state and logic
   const {
     selectedEnvironments,
-    serviceSearchQuery,
+    selectedServices,
     branchSearchQuery,
-    setServiceSearchQuery,
     setBranchSearchQuery,
     toggleEnvironmentFilter,
+    toggleServiceFilter,
+    clearEnvironmentFilter,
+    clearServiceFilter,
     filteredEnvironments,
     getApplicationsForEnv,
     hasResults,
-    selectedEnvNames,
   } = useEnvironmentFilters(environments, applications, refBindings)
 
   // One O(N) grouping pass per data change instead of per-row filtering
@@ -131,12 +132,13 @@ export default function DashboardPage() {
         environments={environments}
         applications={applications}
         selectedEnvironments={selectedEnvironments}
-        selectedEnvNames={selectedEnvNames}
-        serviceSearchQuery={serviceSearchQuery}
+        selectedServices={selectedServices}
         branchSearchQuery={branchSearchQuery}
-        onServiceSearchChange={setServiceSearchQuery}
         onBranchSearchChange={setBranchSearchQuery}
         onToggleEnvironmentFilter={toggleEnvironmentFilter}
+        onToggleServiceFilter={toggleServiceFilter}
+        onClearEnvironmentFilter={clearEnvironmentFilter}
+        onClearServiceFilter={clearServiceFilter}
         onExpandAll={expandAll}
         onCollapseAll={collapseAll}
       />

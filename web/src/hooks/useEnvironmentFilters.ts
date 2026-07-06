@@ -3,26 +3,31 @@ import { Application, Environment, RefBinding } from '@/axios'
 
 const EMPTY: Application[] = []
 
+function useToggleSet(): [Set<string>, (value: string) => void, () => void] {
+  const [set, setSet] = useState<Set<string>>(new Set())
+  const toggle = useCallback((value: string) => {
+    setSet((current) => {
+      const next = new Set(current)
+      if (next.has(value)) {
+        next.delete(value)
+      } else {
+        next.add(value)
+      }
+      return next
+    })
+  }, [])
+  const clear = useCallback(() => setSet(new Set()), [])
+  return [set, toggle, clear]
+}
+
 export function useEnvironmentFilters(
   environments: Environment[],
   applications: Application[],
   refBindings: Map<string, RefBinding>
 ) {
-  const [selectedEnvironments, setSelectedEnvironments] = useState<Set<string>>(new Set())
-  const [serviceSearchQuery, setServiceSearchQuery] = useState<string>('')
+  const [selectedEnvironments, toggleEnvironmentFilter, clearEnvironmentFilter] = useToggleSet()
+  const [selectedServices, toggleServiceFilter, clearServiceFilter] = useToggleSet()
   const [branchSearchQuery, setBranchSearchQuery] = useState<string>('')
-
-  const toggleEnvironmentFilter = useCallback((envName: string) => {
-    setSelectedEnvironments((current) => {
-      const newSet = new Set(current)
-      if (newSet.has(envName)) {
-        newSet.delete(envName)
-      } else {
-        newSet.add(envName)
-      }
-      return newSet
-    })
-  }, [])
 
   const filteredEnvironments = useMemo(() => {
     return environments.filter((env) => {
@@ -35,11 +40,10 @@ export function useEnvironmentFilters(
   // re-filtering per environment per render.
   const applicationsByEnv = useMemo(() => {
     const result = new Map<string, Application[]>()
-    const serviceQuery = serviceSearchQuery.toLowerCase()
     const branchQuery = branchSearchQuery.toLowerCase()
     for (const env of filteredEnvironments) {
       const apps = applications.filter((app) => {
-        if (serviceQuery && !app.name.toLowerCase().includes(serviceQuery)) {
+        if (selectedServices.size > 0 && !selectedServices.has(app.name)) {
           return false
         }
         if (branchQuery) {
@@ -53,7 +57,7 @@ export function useEnvironmentFilters(
       result.set(env.name, apps)
     }
     return result
-  }, [filteredEnvironments, applications, refBindings, serviceSearchQuery, branchSearchQuery])
+  }, [filteredEnvironments, applications, refBindings, selectedServices, branchSearchQuery])
 
   const getApplicationsForEnv = useCallback(
     (envName: string) => applicationsByEnv.get(envName) ?? EMPTY,
@@ -67,20 +71,17 @@ export function useEnvironmentFilters(
     return false
   }, [applicationsByEnv])
 
-  const selectedEnvNames = useMemo(() => {
-    return Array.from(selectedEnvironments).sort().join(', ')
-  }, [selectedEnvironments])
-
   return {
     selectedEnvironments,
-    serviceSearchQuery,
+    selectedServices,
     branchSearchQuery,
-    setServiceSearchQuery,
     setBranchSearchQuery,
     toggleEnvironmentFilter,
+    toggleServiceFilter,
+    clearEnvironmentFilter,
+    clearServiceFilter,
     filteredEnvironments,
     getApplicationsForEnv,
     hasResults,
-    selectedEnvNames,
   }
 }
