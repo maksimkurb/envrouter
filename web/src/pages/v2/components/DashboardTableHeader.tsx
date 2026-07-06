@@ -4,7 +4,11 @@ import { TableHead, TableHeader, TableRow } from '@/components/ui/table'
 export function DashboardTableHeader() {
   return (
     <TableHeader>
-      <TableRow className="bg-blue-500/20 hover:bg-blue-500/20">
+      {/* bg lives on the cells (not the row) so the container's rounded
+          corners aren't painted over; radius = container 8px − 1px border.
+          overflow-hidden on the wrapper is not an option: it would clip the
+          branch-suggestion dropdowns. */}
+      <TableRow className="hover:bg-transparent [&>th]:bg-blue-500/20 [&>th:first-child]:rounded-tl-[7px] [&>th:last-child]:rounded-tr-[7px]">
         <TableHead className="w-12">
           <span className="sr-only">Expand</span>
         </TableHead>

@@ -22,6 +22,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarSeparator,
   useSidebar,
 } from "@/components/ui/sidebar"
 import {
@@ -107,7 +108,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar {...props}>
       <SidebarHeader>
-        <div className="flex items-center gap-2 p-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0">
+        {/* no own padding: header's p-2 gives the logo a constant 8px left
+            offset, which is also dead-center in the 48px collapsed rail —
+            so it never shifts during the collapse animation */}
+        <div className="flex items-center gap-2">
           <img src="/logo.svg" alt="" className="h-8 w-8 max-w-none shrink-0" />
           <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
             <span className="truncate font-semibold">EnvRouter</span>
@@ -138,12 +142,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton tooltip="Back to v1 (MUI)" render={<Link to="/" />}>
+          <SidebarMenuItem className="group-data-[collapsible=icon]:hidden">
+            <SidebarMenuButton render={<Link to="/" />}>
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               <span>Back to v1 (MUI)</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          <SidebarSeparator className="group-data-[collapsible=icon]:hidden" />
           <SidebarMenuItem>
             <ThemeSelector />
           </SidebarMenuItem>
