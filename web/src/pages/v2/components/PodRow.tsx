@@ -197,9 +197,11 @@ export function PodRow({ pod, application }: { pod: InstancePod; application: Ap
     <TableRow className="bg-muted/30 hover:bg-muted/40">
       <TableCell></TableCell>
       <TableCell>
-        <div className="flex items-center gap-1 pl-4">
+        <div className="flex min-w-0 items-center gap-1 pl-4">
           <span className={cn('h-2 w-2 shrink-0 rounded-full', status.dotClass)} aria-hidden="true" />
-          <span className="ml-1 font-mono text-xs text-muted-foreground">{pod.name}</span>
+          <span className="ml-1 truncate font-mono text-xs text-muted-foreground" title={pod.name}>
+            {pod.name}
+          </span>
           <Button
             variant="ghost"
             size="icon-xs"

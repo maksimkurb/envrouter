@@ -157,7 +157,7 @@ export default function DashboardPage() {
         <EmptyState />
       ) : (
         <div className="border rounded-lg">
-          <Table>
+          <Table className="table-fixed">
             <DashboardTableHeader />
             <TableBody>
               {filteredEnvironments.map((environment) => {
