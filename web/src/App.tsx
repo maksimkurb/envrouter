@@ -152,8 +152,8 @@ function App() {
                 <Divider/>
                 <MenuList>
                   {[
-                    {title: 'Dashboard', icon: <DashboardIcon/>, path: '/'},
-                    {title: 'Repositories', icon: <SourceIcon/>, path: '/repo'}
+                    {title: 'Dashboard', icon: <DashboardIcon/>, path: '/v1'},
+                    {title: 'Repositories', icon: <SourceIcon/>, path: '/v1/repo'}
                   ].map((item, index) => (
                       <NavLink to={item.path} style={{textDecoration: 'none'}} key={item.path}>
                         <ListItem key={item.title} selected={activeRoute(item.path)}>
@@ -168,7 +168,7 @@ function App() {
                 <Divider/>
                 <MenuList>
                   {[
-                    {title: 'New UI (v2)', icon: <SparkleIcon />, path: '/v2'},
+                    {title: 'New UI (v2)', icon: <SparkleIcon />, path: '/'},
                   ].map((item, index) => (
                       <NavLink to={item.path} style={{textDecoration: 'none'}} key={item.path}>
                         <ListItem key={item.title} selected={activeRoute(item.path)}>

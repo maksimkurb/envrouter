@@ -33,17 +33,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-// Navigation data for EnvRouter. Paths are relative to the /v2 router mount.
+// Navigation data for EnvRouter. The v2 app is mounted at the root.
 const data = {
   navMain: [
     {
       title: "Dashboard",
-      url: "/v2",
+      url: "/",
       icon: Home,
     },
     {
       title: "Repositories",
-      url: "/v2/repo",
+      url: "/repo",
       icon: Folders,
     },
   ],
@@ -139,7 +139,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               ))}
               <SidebarSeparator className="mx-0 my-2 group-data-[collapsible=icon]:hidden" />
               <SidebarMenuItem className="group-data-[collapsible=icon]:hidden">
-                <SidebarMenuButton render={<Link to="/" />}>
+                <SidebarMenuButton render={<Link to="/v1" />}>
                   <History className="h-4 w-4" aria-hidden="true" />
                   <span>Back to v1 (MUI)</span>
                 </SidebarMenuButton>
