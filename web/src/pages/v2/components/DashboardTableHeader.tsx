@@ -4,7 +4,7 @@ import { TableHead, TableHeader, TableRow } from '@/components/ui/table'
 export function DashboardTableHeader() {
   return (
     <TableHeader>
-      <TableRow>
+      <TableRow className="bg-blue-500/20 hover:bg-blue-500/20">
         <TableHead className="w-12">
           <span className="sr-only">Expand</span>
         </TableHead>

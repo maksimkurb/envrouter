@@ -108,7 +108,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     <Sidebar {...props}>
       <SidebarHeader>
         <div className="flex items-center gap-2 p-2">
-          <img src="/logo192.png" alt="" className="size-8 shrink-0 rounded-lg" />
+          <img src="/logo192.png" alt="" className="h-8 w-8 shrink-0 object-contain" />
           <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
             <span className="truncate font-semibold">EnvRouter</span>
             <span className="truncate text-xs text-muted-foreground">Continuous Delivery</span>
