@@ -64,7 +64,7 @@ func NewInstanceService(
 
 func (i *instanceService) FindAll() ([]*api.Instance, error) {
 	deployments := i.deploymentService.GetAll()
-	var result []*api.Instance
+	result := []*api.Instance{}
 	for _, v := range deployments {
 		instance := i.mapInstance(v)
 		result = append(result, instance)

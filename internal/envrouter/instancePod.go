@@ -68,7 +68,7 @@ func NewInstancePodService(
 
 func (i *instancePodService) FindAll() ([]*api.InstancePod, error) {
 	pods := i.podService.GetAll()
-	var result []*api.InstancePod
+	result := []*api.InstancePod{}
 	for _, v := range pods {
 		result = append(result, i.mapInstancePod(v))
 	}

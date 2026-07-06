@@ -33,7 +33,7 @@ func (e *environmentService) FindAll() ([]*api.Environment, error) {
 			namespaces[v.Namespace] = true
 		}
 	}
-	var result []*api.Environment
+	result := []*api.Environment{}
 	for k, _ := range namespaces {
 		environment := api.Environment{Name: k}
 		result = append(result, &environment)
