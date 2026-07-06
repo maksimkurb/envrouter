@@ -163,10 +163,15 @@ export function RepositoryDialog({
         })
         onClose(true)
       })
-      .catch(() => {
+      .catch((err) => {
         setSaving(false)
         toast({
-          title: isNew ? 'Failed to add repository' : 'Failed to update repository',
+          title:
+            err?.response?.status === 403
+              ? "You don't have permission to do that"
+              : isNew
+                ? 'Failed to add repository'
+                : 'Failed to update repository',
           description: trimmedName,
           variant: 'destructive',
         })

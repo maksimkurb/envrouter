@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 import axios from 'axios'
 import { BASE_PATH } from '@/axios/base'
 
@@ -8,7 +8,16 @@ export interface AuthInfo {
   userIdentifier?: string
   fullName?: string
   email?: string
+  groups?: string[]
+  // absent on older backends — consumers treat missing as allowed (`!== false`)
+  canDeploy?: boolean
+  canConfigure?: boolean
 }
+
+// AppV2 fetches auth once and provides it here so route pages read it without
+// re-fetching /auth/userinfo
+export const AuthContext = createContext<AuthInfo | null>(null)
+export const useAuthContext = () => useContext(AuthContext)
 
 // null while the userinfo check is in flight; when OIDC is enabled and the
 // session is missing/expired this redirects to the login flow instead of

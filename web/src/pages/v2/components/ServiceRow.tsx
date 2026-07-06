@@ -19,6 +19,8 @@ interface ServiceRowProps {
   instances: Instance[]
   instancePods: InstancePod[]
   refsHeads: Ref[]
+  defaultRef: string
+  canDeploy: boolean
   onRefBindingChanged: (refBinding: RefBinding) => void
 }
 
@@ -31,10 +33,12 @@ export const ServiceRow = memo(function ServiceRow({
   instances,
   instancePods,
   refsHeads,
+  defaultRef,
+  canDeploy,
   onRefBindingChanged,
 }: ServiceRowProps) {
   const { toast } = useToast()
-  const boundRef = refBinding?.ref || ''
+  const boundRef = refBinding?.ref || defaultRef
 
   const [ref, setRef] = useState(boundRef)
   const [editing, setEditing] = useState(false)
@@ -86,12 +90,15 @@ export const ServiceRow = memo(function ServiceRow({
           description: `Deploying ref ${newRef} to ${environmentName} environment`,
         })
       })
-      .catch(() => {
+      .catch((err) => {
         lastDeployed.current = null
         setRef(boundRef)
         draft.current = boundRef
         toast({
-          title: 'Deployment failed',
+          title:
+            err?.response?.status === 403
+              ? "You don't have permission to do that"
+              : 'Deployment failed',
           description: `Ref ${newRef} could not be deployed to ${environmentName} environment`,
           variant: 'destructive',
         })
@@ -155,6 +162,19 @@ export const ServiceRow = memo(function ServiceRow({
         <TableCell>
           <div className="space-y-1">
             <div className="flex max-w-xs items-center gap-1">
+            {!canDeploy ? (
+              // read-only: no deploy permission — show the current ref, not an editable combobox
+              <div className="border-input flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md border bg-transparent px-3 text-sm dark:bg-input/30">
+                <span className="min-w-0 flex-1 truncate">{ref}</span>
+                {boundSha && <span className="font-mono text-xs text-muted-foreground">{boundSha}</span>}
+                {deploying && (
+                  <Loader2
+                    aria-label="Deployment in progress"
+                    className="h-4 w-4 animate-spin text-muted-foreground"
+                  />
+                )}
+              </div>
+            ) : (
             <Command
               shouldFilter={dirty}
               className="relative min-w-0 flex-1 overflow-visible rounded-none bg-transparent p-0"
@@ -235,6 +255,7 @@ export const ServiceRow = memo(function ServiceRow({
                 </CommandList>
               )}
             </Command>
+            )}
             <Button
               variant="ghost"
               size="icon-sm"

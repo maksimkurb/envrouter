@@ -4,6 +4,7 @@ import { Table, TableBody } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useDashboardData } from '@/hooks/useDashboardData'
+import { useAuthContext } from '@/hooks/useAuth'
 import { useEnvironmentState } from '@/hooks/useEnvironmentState'
 import { useEnvironmentFilters } from '@/hooks/useEnvironmentFilters'
 import { FilterControls } from './components/FilterControls'
@@ -86,12 +87,14 @@ export default function DashboardPage() {
     instances,
     instancePods,
     refsHeads,
+    defaultRef,
     updateRefBinding,
     loading,
     error,
     sseError,
     reconnect,
   } = useDashboardData()
+  const canDeploy = useAuthContext()?.canDeploy !== false
 
   // Environment expand/collapse state
   const { expandedEnvs, toggleEnvironment, expandAll, collapseAll } = useEnvironmentState(environments)
@@ -188,6 +191,8 @@ export default function DashboardPage() {
                             instances={instancesByEnvApp.get(key) ?? EMPTY}
                             instancePods={podsByEnvApp.get(key) ?? EMPTY}
                             refsHeads={refsByRepo.get(application.repositoryName ?? '') ?? EMPTY}
+                            defaultRef={defaultRef}
+                            canDeploy={canDeploy}
                             onRefBindingChanged={updateRefBinding}
                           />
                         )

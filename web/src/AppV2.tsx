@@ -5,7 +5,7 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { Toaster } from "@/components/ui/sonner"
 import { Loader2 } from 'lucide-react'
-import { useAuth } from '@/hooks/useAuth'
+import { AuthContext, useAuth } from '@/hooks/useAuth'
 import DashboardPage from './pages/v2/DashboardPage';
 import RepositoriesPage from './pages/v2/RepositoriesPage';
 
@@ -29,6 +29,7 @@ function V2App() {
   }
 
   return (
+    <AuthContext.Provider value={auth}>
     <ThemeProvider
       attribute="class"
       defaultTheme="system"
@@ -70,6 +71,7 @@ function V2App() {
         <Toaster />
       </div>
     </ThemeProvider>
+    </AuthContext.Provider>
   )
 }
 

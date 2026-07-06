@@ -49,10 +49,13 @@ export function ApplicationDialog({ application, repositories, onClose }: Applic
         toast({ title: 'Application updated', description: application.name })
         onClose(true)
       })
-      .catch(() => {
+      .catch((err) => {
         setSaving(false)
         toast({
-          title: 'Failed to update application',
+          title:
+            err?.response?.status === 403
+              ? "You don't have permission to do that"
+              : 'Failed to update application',
           description: application.name,
           variant: 'destructive',
         })
@@ -109,9 +112,11 @@ export function ApplicationDialog({ application, repositories, onClose }: Applic
               aria-describedby="app-webhook-hint"
             />
             <p id="app-webhook-hint" className="text-xs text-muted-foreground">
-              Called with POST on every branch change. URL substitution:{' '}
-              <code className="rounded bg-muted px-1 font-mono">{'{ref}'}</code> — the branch being
-              deployed. The form body carries GitLab pipeline-trigger variables:{' '}
+              Called with POST on every branch change. URL substitutions:{' '}
+              <code className="rounded bg-muted px-1 font-mono">{'{ref}'}</code> and{' '}
+              <code className="rounded bg-muted px-1 font-mono">{'{ref_urlencoded}'}</code> — the
+              branch being deployed (use the encoded form inside query strings). The form body
+              carries GitLab pipeline-trigger variables:{' '}
               <code className="rounded bg-muted px-1 font-mono">ENVROUTER_OLD_REF</code>,{' '}
               <code className="rounded bg-muted px-1 font-mono">ENVROUTER_NEW_REF</code>,{' '}
               <code className="rounded bg-muted px-1 font-mono">ENVROUTER_TRIGGERED_BY_USERNAME</code>,{' '}

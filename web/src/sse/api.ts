@@ -9,6 +9,7 @@ export interface Snapshot {
     instances: Instance[]
     instancePods: InstancePod[]
     refsHeads: Ref[]
+    defaultRef: string
 }
 
 export interface SSEvent {

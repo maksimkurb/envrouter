@@ -25,6 +25,7 @@ import {
 import { Plus, Link as LinkIcon, KeyRound, Settings, Trash2, FolderGit2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { useRepositoriesData } from '@/hooks/useRepositoriesData'
+import { useAuthContext } from '@/hooks/useAuth'
 import { RepositoryDialog } from './components/RepositoryDialog'
 import { ApplicationDialog } from './components/ApplicationDialog'
 
@@ -76,6 +77,7 @@ export default function RepositoriesPage() {
     error,
     refetch,
   } = useRepositoriesData()
+  const canConfigure = useAuthContext()?.canConfigure !== false
 
   const [editingRepository, setEditingRepository] = useState<Repository | null>(null)
   const [editingApplication, setEditingApplication] = useState<Application | null>(null)
@@ -93,10 +95,13 @@ export default function RepositoriesPage() {
         setDeleteTarget(null)
         refetch()
       })
-      .catch(() => {
+      .catch((err) => {
         setDeleting(false)
         toast({
-          title: 'Failed to delete repository',
+          title:
+            err?.response?.status === 403
+              ? "You don't have permission to do that"
+              : 'Failed to delete repository',
           description: repository.name,
           variant: 'destructive',
         })
@@ -112,10 +117,12 @@ export default function RepositoriesPage() {
             Manage your Git repositories and credentials
           </p>
         </div>
-        <Button onClick={() => setEditingRepository(NEW_REPOSITORY)}>
-          <Plus className="h-4 w-4 mr-2" aria-hidden="true" />
-          Add Repository
-        </Button>
+        {canConfigure && (
+          <Button onClick={() => setEditingRepository(NEW_REPOSITORY)}>
+            <Plus className="h-4 w-4 mr-2" aria-hidden="true" />
+            Add Repository
+          </Button>
+        )}
       </div>
 
       {error ? (
@@ -131,10 +138,12 @@ export default function RepositoriesPage() {
                 <p className="text-lg font-medium">No repositories yet</p>
                 <p className="text-sm">Add a Git repository so its branches can be deployed.</p>
               </div>
-              <Button variant="outline" onClick={() => setEditingRepository(NEW_REPOSITORY)}>
-                <Plus className="h-4 w-4 mr-2" aria-hidden="true" />
-                Add Repository
-              </Button>
+              {canConfigure && (
+                <Button variant="outline" onClick={() => setEditingRepository(NEW_REPOSITORY)}>
+                  <Plus className="h-4 w-4 mr-2" aria-hidden="true" />
+                  Add Repository
+                </Button>
+              )}
             </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -145,24 +154,26 @@ export default function RepositoriesPage() {
                       <CardTitle className="text-lg truncate" title={repository.name}>
                         {repository.name}
                       </CardTitle>
-                      <div className="flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          aria-label={`Edit repository ${repository.name}`}
-                          onClick={() => setEditingRepository(repository)}
-                        >
-                          <Settings className="h-4 w-4" aria-hidden="true" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          aria-label={`Delete repository ${repository.name}`}
-                          onClick={() => setDeleteTarget(repository)}
-                        >
-                          <Trash2 className="h-4 w-4" aria-hidden="true" />
-                        </Button>
-                      </div>
+                      {canConfigure && (
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-label={`Edit repository ${repository.name}`}
+                            onClick={() => setEditingRepository(repository)}
+                          >
+                            <Settings className="h-4 w-4" aria-hidden="true" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-label={`Delete repository ${repository.name}`}
+                            onClick={() => setDeleteTarget(repository)}
+                          >
+                            <Trash2 className="h-4 w-4" aria-hidden="true" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -228,14 +239,16 @@ export default function RepositoriesPage() {
                           {application.webhook || <span className="text-muted-foreground">—</span>}
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            aria-label={`Configure application ${application.name}`}
-                            onClick={() => setEditingApplication(application)}
-                          >
-                            <Settings className="h-4 w-4" aria-hidden="true" />
-                          </Button>
+                          {canConfigure && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              aria-label={`Configure application ${application.name}`}
+                              onClick={() => setEditingApplication(application)}
+                            >
+                              <Settings className="h-4 w-4" aria-hidden="true" />
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
