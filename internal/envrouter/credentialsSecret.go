@@ -1,10 +1,11 @@
 package envrouter
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"gitlab.com/jonasasx/envrouter/internal/envrouter/api"
 	"gitlab.com/jonasasx/envrouter/internal/envrouter/k8s"
-	rand "gitlab.com/jonasasx/envrouter/internal/utils"
 )
 
 type CredentialsSecretService interface {
@@ -61,7 +62,13 @@ func (c *credentialsSecretService) Save(credentialsSecretRequest *api.Credential
 		"username": []byte(credentialsSecretRequest.Username),
 		"password": []byte(credentialsSecretRequest.Password),
 	}
-	name := "envrouter-" + rand.String(8)
+	// crypto/rand: names must be unpredictable and collision-free — Save
+	// silently overwrites an existing secret of the same name.
+	suffix := make([]byte, 8)
+	if _, err := rand.Read(suffix); err != nil {
+		return nil, err
+	}
+	name := "envrouter-" + hex.EncodeToString(suffix)
 	err := c.dataStorage.Save(name, data)
 	if err != nil {
 		return nil, err

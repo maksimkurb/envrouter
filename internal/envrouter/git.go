@@ -11,6 +11,7 @@ import (
 	"gitlab.com/jonasasx/envrouter/internal/envrouter/api"
 	"gitlab.com/jonasasx/envrouter/internal/utils"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sync"
 
@@ -49,6 +50,15 @@ func NewGitClient(
 // requested commit is genuinely absent locally and the cache is cold.
 const commitFetchThrottle = 15 * time.Second
 
+// repoPath maps a repository name to its on-disk clone path, rejecting names
+// that could escape /tmp/git via path separators or traversal.
+func repoPath(repositoryName string) (string, error) {
+	if repositoryName == "" || strings.ContainsAny(repositoryName, `/\`) || strings.Contains(repositoryName, "..") {
+		return "", fmt.Errorf("invalid repository name %q", repositoryName)
+	}
+	return filepath.Join("/tmp/git", repositoryName), nil
+}
+
 // lockRepository serializes all on-disk access to a single repository:
 // go-git's filesystem storage is not safe under concurrent clone/fetch/read.
 func (g *gitClient) lockRepository(repositoryName string) *sync.Mutex {
@@ -74,7 +84,10 @@ func (g *gitClient) getRepository(repositoryName string) (r *git.Repository, err
 	if err != nil {
 		return nil, err
 	}
-	path := fmt.Sprintf("/tmp/git/%s", repositoryName)
+	path, err := repoPath(repositoryName)
+	if err != nil {
+		return nil, err
+	}
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		r, err = git.PlainClone(path, true, options)
 		if err != nil {
@@ -110,7 +123,10 @@ func (g *gitClient) getRepositoryNoFetch(repositoryName string) (r *git.Reposito
 	if err != nil {
 		return nil, err
 	}
-	path := fmt.Sprintf("/tmp/git/%s", repositoryName)
+	path, err := repoPath(repositoryName)
+	if err != nil {
+		return nil, err
+	}
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		r, err = git.PlainClone(path, true, options)
 		if err != nil {

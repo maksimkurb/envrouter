@@ -115,9 +115,16 @@ func main() {
 	router.Use(securityHeaders())
 	router.Use(bodyLimit())
 
-	config := cors.DefaultConfig()
-	config.AllowAllOrigins = true
-	router.Use(cors.New(config))
+	// CORS is off unless explicitly configured: the SPA is same-origin, so
+	// nothing needs it, and an open policy lets any site script a visitor's
+	// browser against every reachable envrouter (worse when OIDC is disabled).
+	if origins := splitTrimmed(os.Getenv("ENVROUTER_CORS_ALLOWED_ORIGINS")); len(origins) > 0 {
+		config := cors.DefaultConfig()
+		config.AllowOrigins = origins
+		config.AllowCredentials = true
+		router.Use(cors.New(config))
+		log.Infof("CORS enabled for origins: %v", origins)
+	}
 	// gzip REST payloads (large repetitive JSON compresses ~10x); SSE streams
 	// are excluded — gzip buffering would break per-event flushing
 	router.Use(gzip.Gzip(gzip.DefaultCompression, gzip.WithExcludedPaths([]string{
@@ -147,7 +154,20 @@ func main() {
 	router.GET("/api/v1/subscription", server.streamPods)
 	router.GET("/api/v2/subscription", server.streamV2)
 	router.GET("/api/v2/audit/refSwitches", func(c *gin.Context) {
-		c.JSON(200, auditLog.Find(c.Query("environment"), c.Query("application")))
+		environment, application := c.Query("environment"), c.Query("application")
+		var records []envrouter.RefSwitch
+		if environment == "" && application == "" {
+			records = auditLog.FindAll()
+		} else {
+			records = auditLog.Find(environment, application)
+		}
+		// IPs are admin-only
+		if !authService.CanConfigure(auth.ActorFromContext(c)) {
+			for i := range records {
+				records[i].IP = ""
+			}
+		}
+		c.JSON(200, records)
 	})
 	router.GET("/healthz", func(c *gin.Context) {
 		c.Data(200, "text/plain", []byte("ok"))
@@ -156,8 +176,14 @@ func main() {
 
 	api.RegisterHandlers(router, server)
 
-	err = router.Run("0.0.0.0:8080")
-	if err != nil {
+	// explicit server so we can set ReadHeaderTimeout (slowloris guard). No
+	// WriteTimeout: it would kill long-lived SSE streams.
+	srv := &http.Server{
+		Addr:              "0.0.0.0:8080",
+		Handler:           router,
+		ReadHeaderTimeout: 15 * time.Second,
+	}
+	if err := srv.ListenAndServe(); err != nil {
 		panic(err)
 	}
 }
@@ -295,8 +321,21 @@ func (s *ServerInterfaceImpl) GetApiV1Applications(c *gin.Context) {
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
-	} else {
-		c.JSON(200, result)
+	}
+	s.redactWebhooks(c, result)
+	c.JSON(200, result)
+}
+
+// redactWebhooks blanks webhook URLs for non-admins. The URL embeds the
+// pipeline-trigger token, so exposing it to view/deploy users would let them
+// trigger deploys out-of-band, bypassing authz and the audit log. Safe to
+// mutate: FindAll returns freshly unmarshalled, non-shared objects.
+func (s *ServerInterfaceImpl) redactWebhooks(c *gin.Context, apps []*api.Application) {
+	if s.authService.CanConfigure(auth.ActorFromContext(c)) {
+		return
+	}
+	for _, a := range apps {
+		a.Webhook = nil
 	}
 }
 
@@ -405,27 +444,40 @@ func (s *ServerInterfaceImpl) GetApiV1GitRefs(c *gin.Context) {
 // subscribe registers a buffered, non-blocking event subscriber: a slow or
 // gone client drops events instead of blocking publishers (git scanner,
 // k8s informers). Caller must Unsubscribe the returned handler.
-func (s *ServerInterfaceImpl) subscribe(buffer int) (chan api.SSEvent, *utils.ObserverEventHandlerFuncs) {
+func (s *ServerInterfaceImpl) subscribe(buffer int, closeOnOverflow bool) (chan api.SSEvent, *utils.ObserverEventHandlerFuncs, <-chan struct{}) {
 	subscriber := make(chan api.SSEvent, buffer)
+	overflow := make(chan struct{}, 1)
 	handler := &utils.ObserverEventHandlerFuncs{
 		EventFunc: func(oldObj interface{}, newObj interface{}) {
 			select {
 			case subscriber <- newObj.(api.SSEvent):
 			default:
+				// buffer full: the client is too slow. v1 tolerates gaps (it
+				// re-fetches via REST); v2's snapshot+deltas contract can't, so
+				// signal overflow to close the stream and force a fresh snapshot.
+				if closeOnOverflow {
+					select {
+					case overflow <- struct{}{}:
+					default:
+					}
+				}
 			}
 		},
 	}
 	s.eventsObserver.Subscribe(handler)
-	return subscriber, handler
+	return subscriber, handler, overflow
 }
 
-func (s *ServerInterfaceImpl) streamEvents(c *gin.Context, subscriber chan api.SSEvent) {
+func (s *ServerInterfaceImpl) streamEvents(c *gin.Context, subscriber chan api.SSEvent, overflow <-chan struct{}) {
 	ticker := time.NewTicker(time.Second * 10)
 	defer ticker.Stop()
 	c.Stream(func(w io.Writer) bool {
 		select {
 		case event := <-subscriber:
 			c.SSEvent("", event)
+		case <-overflow:
+			log.Warn("SSE subscriber buffer overflow; closing stream to force client resync")
+			return false
 		case <-ticker.C:
 			c.SSEvent("", api.SSEvent{ItemType: "Ping"})
 		case <-c.Request.Context().Done():
@@ -455,9 +507,9 @@ func (s *ServerInterfaceImpl) streamPods(c *gin.Context) {
 		return
 	}
 	defer releaseSSE()
-	subscriber, handler := s.subscribe(256)
+	subscriber, handler, overflow := s.subscribe(256, false)
 	defer s.eventsObserver.Unsubscribe(handler)
-	s.streamEvents(c, subscriber)
+	s.streamEvents(c, subscriber, overflow)
 }
 
 // streamV2 delivers the complete dashboard state as ONE Snapshot event and
@@ -471,10 +523,10 @@ func (s *ServerInterfaceImpl) streamV2(c *gin.Context) {
 	}
 	defer releaseSSE()
 	// larger buffer: it holds deltas while the snapshot is being built
-	subscriber, handler := s.subscribe(1024)
+	subscriber, handler, overflow := s.subscribe(1024, true)
 	defer s.eventsObserver.Unsubscribe(handler)
 
-	snapshot, err := s.buildSnapshot()
+	snapshot, err := s.buildSnapshot(c)
 	if err != nil {
 		// closing makes the client's auto-reconnect retry
 		log.Errorf("SSE v2 snapshot: %v", err)
@@ -482,10 +534,10 @@ func (s *ServerInterfaceImpl) streamV2(c *gin.Context) {
 	}
 	c.SSEvent("", api.SSEvent{ItemType: "Snapshot", Item: snapshot, Event: "UPDATED"})
 	c.Writer.Flush()
-	s.streamEvents(c, subscriber)
+	s.streamEvents(c, subscriber, overflow)
 }
 
-func (s *ServerInterfaceImpl) buildSnapshot() (*api.Snapshot, error) {
+func (s *ServerInterfaceImpl) buildSnapshot(c *gin.Context) (*api.Snapshot, error) {
 	environments, err := s.environmentService.FindAll()
 	if err != nil {
 		return nil, err
@@ -494,6 +546,7 @@ func (s *ServerInterfaceImpl) buildSnapshot() (*api.Snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
+	s.redactWebhooks(c, applications)
 	refBindings, err := s.refService.SnapshotBindings()
 	if err != nil {
 		return nil, err
