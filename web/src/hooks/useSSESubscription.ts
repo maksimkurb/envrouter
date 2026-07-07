@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import axios from 'axios'
 import { SSEvent } from '@/sse/api'
 import { BASE_PATH } from '@/axios/base'
+import { redirectToLogin } from '@/lib/authRedirect'
 
 type SSEEventHandler = (event: SSEvent) => void
 
@@ -66,6 +68,16 @@ export function useSSESubscription(onEvent: SSEEventHandler) {
         setError(new Error('SSE connection error'))
         eventSource?.close()
         if (watchdog) clearTimeout(watchdog)
+
+        // EventSource hides the HTTP status — if the drop was a 401 (expired
+        // session) retrying is futile; probe userinfo and re-auth instead.
+        // Unreachable server → catch ignores, the plain retry loop handles it.
+        axios
+          .get(`${BASE_PATH}/auth/userinfo`)
+          .then((r) => {
+            if (r.data?.enabled && !r.data?.authenticated) redirectToLogin()
+          })
+          .catch(() => {})
 
         // Attempt reconnection after 5 seconds
         reconnectTimeout = setTimeout(() => {

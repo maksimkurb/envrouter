@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import axios from 'axios'
 import { BASE_PATH } from '@/axios/base'
+import { redirectToLogin } from '@/lib/authRedirect'
 
 export interface AuthInfo {
   enabled: boolean
@@ -31,9 +32,7 @@ export function useAuth(): AuthInfo | null {
       .get<AuthInfo>(`${BASE_PATH}/auth/userinfo`)
       .then((response) => {
         if (response.data.enabled && !response.data.authenticated) {
-          window.location.href = `${BASE_PATH}/auth/login?rd=${encodeURIComponent(
-            window.location.pathname
-          )}`
+          redirectToLogin()
           return
         }
         setAuth(response.data)
