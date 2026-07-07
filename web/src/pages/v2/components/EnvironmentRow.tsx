@@ -15,7 +15,9 @@ export const EnvironmentRow = memo(function EnvironmentRow({
 }: EnvironmentRowProps) {
   return (
     <TableRow
-      className="font-medium bg-blue-500/10 hover:bg-blue-500/15 cursor-pointer"
+      // bg on cells, not the row: a <tr> background stops at the container edge
+      // when the table scrolls horizontally, leaving the overflow unpainted
+      className="cursor-pointer font-medium [&>td]:bg-blue-500/10 hover:[&>td]:bg-blue-500/15"
       onClick={() => onToggle(environmentName)}
     >
       <TableCell>

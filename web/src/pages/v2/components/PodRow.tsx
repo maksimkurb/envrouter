@@ -14,6 +14,7 @@ import { Separator } from '@/components/ui/separator'
 import { Info, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { parseGoTime, timeAgo } from '@/lib/time'
+import { copyToClipboard } from '@/lib/clipboard'
 
 const api = DefaultApiFp()
 
@@ -137,15 +138,8 @@ export function PodRow({ pod, application }: { pod: InstancePod; application: Ap
   const [commit, setCommit] = useState<Commit | undefined>(undefined)
   const [loading, setLoading] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
-  const [copied, setCopied] = useState(false)
 
-  const copySha = () => {
-    if (!pod.commitSha) return
-    navigator.clipboard.writeText(pod.commitSha).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    })
-  }
+  const copySha = () => copyToClipboard(pod.commitSha ?? '')
 
   useEffect(() => {
     if (pod.commitSha && application.repositoryName) {
@@ -173,7 +167,7 @@ export function PodRow({ pod, application }: { pod: InstancePod; application: Ap
   const started = parseGoTime(pod.startedTime)
 
   return (
-    <TableRow className="bg-muted/30 hover:bg-muted/40">
+    <TableRow className="[&>td]:bg-muted/30 hover:[&>td]:bg-muted/40">
       <TableCell></TableCell>
       <TableCell>
         <div className="flex min-w-0 items-center gap-1 pl-4">
@@ -202,7 +196,7 @@ export function PodRow({ pod, application }: { pod: InstancePod; application: Ap
               aria-label={`Copy full commit hash of pod ${pod.name}`}
               className="ml-2 cursor-pointer text-muted-foreground hover:text-foreground hover:underline"
             >
-              {copied ? 'copied!' : shortSha}
+              {shortSha}
             </button>
           )}
           {loading && (

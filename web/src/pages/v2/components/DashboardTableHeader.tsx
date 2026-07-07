@@ -12,9 +12,9 @@ export function DashboardTableHeader() {
         <TableHead className="w-12">
           <span className="sr-only">Expand</span>
         </TableHead>
-        <TableHead className="w-[25%]">Service</TableHead>
-        <TableHead className="w-[35%]">Target Branch</TableHead>
-        <TableHead className="w-[40%]">Pods</TableHead>
+        <TableHead className="w-[22%]">Service</TableHead>
+        <TableHead className="w-[45%]">Target Branch</TableHead>
+        <TableHead className="w-[33%]">Pods</TableHead>
       </TableRow>
     </TableHeader>
   )

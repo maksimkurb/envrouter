@@ -163,6 +163,7 @@ func main() {
 		eventsObserver:           eventsObserver,
 		gitStorage:               gitStorage,
 		authService:              authService,
+		auditLog:                 auditLog,
 	}
 	router.GET("/api/v2/subscription", server.streamV2)
 	router.GET("/api/v2/audit/refSwitches", func(c *gin.Context) {
@@ -211,6 +212,7 @@ type ServerInterfaceImpl struct {
 	eventsObserver           utils.Observer
 	gitStorage               envrouter.GitStorage
 	authService              *auth.Service
+	auditLog                 envrouter.AuditLog
 }
 
 // splitTrimmed splits a comma list, trims spaces, and drops empties.
@@ -563,6 +565,25 @@ func (s *ServerInterfaceImpl) buildSnapshot(c *gin.Context) (*api.Snapshot, erro
 	if err != nil {
 		return nil, err
 	}
+	// latest switch per env×app, so the dashboard shows who last changed each
+	// binding without a per-row fetch
+	lastSwitches := []*api.RefBindingUpdate{}
+	for _, sw := range s.auditLog.Latest() {
+		lastSwitches = append(lastSwitches, &api.RefBindingUpdate{
+			RefBinding: api.RefBinding{
+				Environment: sw.Environment,
+				Application: sw.Application,
+				Ref:         sw.NewRef,
+			},
+			OldRef: sw.OldRef,
+			UpdatedBy: api.RefBindingActor{
+				UserIdentifier: sw.UserIdentifier,
+				FullName:       sw.FullName,
+				Email:          sw.Email,
+			},
+			Time: sw.Time.Format(time.RFC3339),
+		})
+	}
 	return &api.Snapshot{
 		Environments: environments,
 		Applications: applications,
@@ -571,5 +592,6 @@ func (s *ServerInterfaceImpl) buildSnapshot(c *gin.Context) (*api.Snapshot, erro
 		InstancePods: instancePods,
 		RefsHeads:    refsHeads,
 		DefaultRef:   envrouter.DefaultRef,
+		LastSwitches: lastSwitches,
 	}, nil
 }

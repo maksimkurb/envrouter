@@ -141,9 +141,8 @@
   animation: ref-updated-blink 0.8s ease-in-out 2;
 }
 
-/* the branch-switch toast carries a 28px avatar in the icon slot, which
-   sonner otherwise pins to 16px */
-[data-sonner-toast].ref-switch-toast [data-icon] {
-  width: 1.75rem;
-  height: 1.75rem;
+/* sonner's [data-content] flex child has no min-width:0, so it never shrinks
+   and long content inside can't truncate — let it shrink so it does */
+[data-sonner-toast] [data-content] {
+  min-width: 0;
 }

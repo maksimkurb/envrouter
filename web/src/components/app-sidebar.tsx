@@ -16,7 +16,7 @@ import {
 } from "lucide-react"
 import { BASE_PATH } from "@/axios/base"
 import { Button } from "@/components/ui/button"
-import { initialsOf, useGravatar } from "@/lib/gravatar"
+import { avatarColor, initialsOf, useGravatar } from "@/lib/gravatar"
 import type { AuthInfo } from "@/hooks/useAuth"
 import {
   Sidebar,
@@ -150,7 +150,8 @@ function UserBlock({ auth }: { auth: AuthInfo }) {
         <div
           title={displayName}
           aria-hidden="true"
-          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold leading-none text-primary transition-[width,height] group-data-[collapsible=icon]:size-5 group-data-[collapsible=icon]:text-[9px]"
+          style={{ backgroundColor: avatarColor(initialsOf(displayName)) }}
+          className="flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold leading-none text-white transition-[width,height] group-data-[collapsible=icon]:size-5 group-data-[collapsible=icon]:text-[9px]"
         >
           {initialsOf(displayName)}
         </div>

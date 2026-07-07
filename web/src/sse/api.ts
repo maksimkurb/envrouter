@@ -10,6 +10,8 @@ export interface Snapshot {
     instancePods: InstancePod[]
     refsHeads: Ref[]
     defaultRef: string
+    // latest switch per env×app, so the dashboard can show who last changed each
+    lastSwitches?: RefBindingUpdate[]
 }
 
 // RefBinding deltas (not snapshot bindings) carry the previous ref and who
@@ -21,6 +23,8 @@ export interface RefBindingUpdate extends RefBinding {
         fullName: string
         email: string
     }
+    // RFC3339; absent on older backends
+    time?: string
 }
 
 export interface SSEvent {

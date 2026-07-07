@@ -7,6 +7,26 @@ export function initialsOf(name: string): string {
   return name.trim().slice(0, 2).toUpperCase()
 }
 
+// Jitsi's avatar palette + hashing, so initials-fallback colors match Jitsi's
+// scheme (sum of the initials' code points, modulo palette length).
+const AVATAR_COLORS = [
+  '#6A50D3',
+  '#FF9B42',
+  '#DF486F',
+  '#73348C',
+  '#B23683',
+  '#F96E57',
+  '#4380E2',
+  '#238561',
+  '#00A8B3',
+]
+
+export function avatarColor(initials: string): string {
+  let hash = 0
+  for (const ch of initials) hash += ch.codePointAt(0) ?? 0
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length]
+}
+
 async function sha256Hex(input: string): Promise<string> {
   const bytes = new TextEncoder().encode(input)
   const digest = await crypto.subtle.digest('SHA-256', bytes)

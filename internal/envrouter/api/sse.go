@@ -14,11 +14,15 @@ type RefBindingActor struct {
 }
 
 // RefBindingUpdate is the RefBinding SSE delta payload: the new binding plus
-// the previous ref and who changed it. Snapshot bindings stay plain RefBinding.
+// the previous ref, who changed it, and when. Also used in the snapshot's
+// LastSwitches to show the latest change per binding on load. Snapshot
+// bindings themselves stay plain RefBinding.
 type RefBindingUpdate struct {
 	RefBinding
 	OldRef    string          `json:"oldRef"`
 	UpdatedBy RefBindingActor `json:"updatedBy"`
+	// Time is RFC3339; empty when unknown.
+	Time string `json:"time,omitempty"`
 }
 
 // Snapshot is the first event on /api/v2/subscription: the complete dashboard
@@ -33,4 +37,7 @@ type Snapshot struct {
 	RefsHeads    []*Ref         `json:"refsHeads"`
 	// DefaultRef is the ref shown for env×app pairs with no stored binding.
 	DefaultRef string `json:"defaultRef"`
+	// LastSwitches carries the most recent switch per env×app (from the audit
+	// log) so the dashboard can show who last changed each binding, and when.
+	LastSwitches []*RefBindingUpdate `json:"lastSwitches"`
 }

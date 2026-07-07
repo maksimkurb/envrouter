@@ -29,6 +29,14 @@ export function useSSESubscription(onEvent: SSEEventHandler) {
     let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
     let watchdog: ReturnType<typeof setTimeout> | null = null
     let disposed = false
+    // Each connect() bumps this and every callback captures its value, so a
+    // handler from an older connection no-ops once superseded. Guarantees a
+    // single live stream even when reconnect paths race (onerror + watchdog +
+    // sleep/resume), which is what let a frozen socket replay old deltas.
+    let generation = 0
+    // wall-clock of the last sign of life (open/data/ping) — lets onmessage
+    // tell a live delta from a stale backlog dumped after sleep/resume
+    let lastActivity = Date.now()
 
     // The server pings every 10s; if nothing (data or ping) arrives for 30s
     // the connection is dead in a way onerror can't detect (half-open TCP,
@@ -37,23 +45,45 @@ export function useSSESubscription(onEvent: SSEEventHandler) {
       if (watchdog) clearTimeout(watchdog)
       watchdog = setTimeout(() => {
         console.log('SSE stale (no ping for 30s), reconnecting...')
-        eventSource?.close()
-        setConnected(false)
         connect()
       }, 30_000)
     }
 
     const connect = () => {
       if (disposed) return
-      eventSource = new EventSource(`${BASE_PATH}/api/v2/subscription`)
+      const myGen = ++generation
+      // close the prior socket and cancel any pending reconnect so exactly one
+      // connection is ever live
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout)
+        reconnectTimeout = null
+      }
+      eventSource?.close()
+      lastActivity = Date.now()
+      const es = new EventSource(`${BASE_PATH}/api/v2/subscription`)
+      eventSource = es
 
-      eventSource.onopen = () => {
+      es.onopen = () => {
+        if (myGen !== generation) return
+        lastActivity = Date.now()
         setConnected(true)
         setError(null)
         armWatchdog()
       }
 
-      eventSource.onmessage = (e) => {
+      es.onmessage = (e) => {
+        if (myGen !== generation) return
+        // A big gap since the last message means this socket was frozen (laptop
+        // sleep, long tab suspend) and the browser is now flushing a stale
+        // backlog. Replaying it would fire notifications for switches that
+        // already happened, so discard it and resync via a fresh Snapshot —
+        // bumping the generation makes the rest of the backlog no-op.
+        if (Date.now() - lastActivity > 30_000) {
+          console.log('SSE stale backlog after resume, reconnecting...')
+          connect()
+          return
+        }
+        lastActivity = Date.now()
         armWatchdog()
         try {
           const event = JSON.parse(e.data) as SSEvent
@@ -63,10 +93,11 @@ export function useSSESubscription(onEvent: SSEEventHandler) {
         }
       }
 
-      eventSource.onerror = () => {
+      es.onerror = () => {
+        if (myGen !== generation) return
         setConnected(false)
         setError(new Error('SSE connection error'))
-        eventSource?.close()
+        es.close()
         if (watchdog) clearTimeout(watchdog)
 
         // EventSource hides the HTTP status — if the drop was a 401 (expired
@@ -91,6 +122,7 @@ export function useSSESubscription(onEvent: SSEEventHandler) {
 
     return () => {
       disposed = true
+      generation++ // orphan any in-flight callbacks
       if (reconnectTimeout) {
         clearTimeout(reconnectTimeout)
       }

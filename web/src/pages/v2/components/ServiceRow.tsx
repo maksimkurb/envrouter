@@ -1,15 +1,18 @@
-import { Fragment, memo, useCallback, useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { Command as CommandPrimitive } from 'cmdk'
+import { Fragment, memo, useEffect, useRef, useState } from 'react'
+import { Combobox } from '@base-ui/react/combobox'
 import { Application, DefaultApiFp, Instance, InstancePod, Ref, RefBinding } from '@/axios'
+import { RefBindingUpdate } from '@/sse/api'
 import { TableCell, TableRow } from '@/components/ui/table'
-import { Command, CommandItem, CommandList } from '@/components/ui/command'
+import { InputGroup, InputGroupAddon } from '@/components/ui/input-group'
 import { Badge } from '@/components/ui/badge'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { GitBranch, History, Loader2, Package, PackageOpen, Tag } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { timeAgo } from '@/lib/time'
 import { useToast } from '@/hooks/use-toast'
-import { Button } from '@/components/ui/button'
 import { PodRow } from './PodRow'
+import { UserAvatar } from './UserCell'
 import { RefSwitchLogDialog } from './RefSwitchLogDialog'
 import { isInstanceDeploying, filterPodsByInstance } from '@/lib/instanceUtils'
 
@@ -29,6 +32,8 @@ interface ServiceRowProps {
   canDeploy: boolean
   // two green blinks when someone else just switched this row's branch
   highlight?: boolean
+  // latest switch for this row (who + when), for the avatar by the history button
+  lastSwitch?: RefBindingUpdate
   onRefBindingChanged: (refBinding: RefBinding) => void
 }
 
@@ -44,6 +49,7 @@ export const ServiceRow = memo(function ServiceRow({
   defaultRef,
   canDeploy,
   highlight,
+  lastSwitch,
   onRefBindingChanged,
 }: ServiceRowProps) {
   const { toast } = useToast()
@@ -51,7 +57,6 @@ export const ServiceRow = memo(function ServiceRow({
 
   const [ref, setRef] = useState(boundRef)
   const [editing, setEditing] = useState(false)
-  const [open, setOpen] = useState(false)
   // full suggestion list on focus; filter only once the user types
   const [dirty, setDirty] = useState(false)
   const [expanded, setExpanded] = useState(false)
@@ -62,15 +67,11 @@ export const ServiceRow = memo(function ServiceRow({
   // closure value (an SSE update may have landed while the POST was in flight)
   const boundRefLive = useRef(boundRef)
   boundRefLive.current = boundRef
-  // Enter deploys via onSelect and the following blur must not deploy again
+  // selecting an item and the following blur must not deploy twice
   const lastDeployed = useRef<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  // wrapper we measure to position the portaled suggestion list
-  const anchorRef = useRef<HTMLDivElement>(null)
   // live SHA verification: null = unknown/checking, true/false = resolved
   const [shaValid, setShaValid] = useState<boolean | null>(null)
-  // fixed-position rect for the portaled dropdown (escapes the table's overflow)
-  const [menuRect, setMenuRect] = useState<{ top: number; left: number; width: number } | null>(null)
 
   // Sync local state with prop changes, but never clobber the input mid-edit
   // or while a deploy is in flight (the binding still carries the OLD ref
@@ -88,7 +89,6 @@ export const ServiceRow = memo(function ServiceRow({
   }, [boundRef, editing])
 
   const commitRef = (value: string) => {
-    setOpen(false)
     setEditing(false)
     setDirty(false)
     const newRef = value.trim()
@@ -127,7 +127,6 @@ export const ServiceRow = memo(function ServiceRow({
   const cancelEdit = () => {
     draft.current = boundRef
     setRef(boundRef)
-    setOpen(false)
     setEditing(false)
     setDirty(false)
     inputRef.current?.blur()
@@ -180,34 +179,18 @@ export const ServiceRow = memo(function ServiceRow({
 
   const isCustomRef = !!trimmedRef && !isKnownRef
 
-  // Position the portaled suggestion list under the input. Portaling escapes
-  // the table's overflow-x-auto, which otherwise clips the dropdown.
-  const updateMenuRect = useCallback(() => {
-    const el = anchorRef.current
-    if (!el) return
-    const r = el.getBoundingClientRect()
-    setMenuRect({ top: r.bottom, left: r.left, width: r.width })
-  }, [])
-
-  useEffect(() => {
-    if (!open) return
-    updateMenuRect()
-    // capture=true so scrolling the table container (not just window) repositions
-    window.addEventListener('scroll', updateMenuRect, true)
-    window.addEventListener('resize', updateMenuRect)
-    return () => {
-      window.removeEventListener('scroll', updateMenuRect, true)
-      window.removeEventListener('resize', updateMenuRect)
-    }
-  }, [open, updateMenuRect])
   const boundSha = refsHeads.find((r) => r.ref === boundRef)?.commit?.sha?.slice(0, 7)
-  // with filtering off (pristine focus), DOM order wins: current branch first,
-  // so a bare Enter re-selects it and deploys nothing
-  const orderedRefs = dirty
-    ? refsHeads
-    : [...refsHeads].sort((a, b) =>
-        a.ref === boundRef ? -1 : b.ref === boundRef ? 1 : a.ref.localeCompare(b.ref)
-      )
+  // pristine focus shows the full list, current branch first; once the user
+  // types we filter ourselves (Combobox filter is disabled) so the pristine
+  // full-list behaviour is preserved
+  const orderedRefs = [...refsHeads].sort((a, b) =>
+    a.ref === boundRef ? -1 : b.ref === boundRef ? 1 : a.ref.localeCompare(b.ref)
+  )
+  const displayedRefs = dirty
+    ? orderedRefs.filter((r) => r.ref.toLowerCase().includes(trimmedRef.toLowerCase()))
+    : orderedRefs
+  // item values the Combobox knows about (branch/tag names + the custom entry)
+  const itemNames = [...displayedRefs.map((r) => r.ref), ...(isCustomRef ? [trimmedRef] : [])]
 
   // pods grouped per instance, in instance order (same filter the sheet used)
   const instancePodGroups = instances.map(
@@ -242,7 +225,7 @@ export const ServiceRow = memo(function ServiceRow({
         </TableCell>
         <TableCell>
           <div className="space-y-1">
-            <div className="flex max-w-xs items-center gap-1">
+            <div className="flex items-center gap-1">
             {!canDeploy ? (
               // read-only: no deploy permission — show the current ref, not an editable combobox
               <div className="border-input flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md border bg-transparent px-3 text-sm dark:bg-input/30">
@@ -256,26 +239,36 @@ export const ServiceRow = memo(function ServiceRow({
                 )}
               </div>
             ) : (
-            <Command
-              shouldFilter={dirty}
-              className="relative min-w-0 flex-1 overflow-visible rounded-none bg-transparent p-0"
+            <Combobox.Root
+              items={itemNames}
+              filter={null}
+              // value tracks the text so Combobox never resets the input to a
+              // blank "selected value" label when it closes on blur
+              value={ref}
+              inputValue={ref}
+              onInputValueChange={(value) => {
+                setRef(value)
+                draft.current = value
+                setDirty(true)
+                // editing is driven by focus/blur only — a programmatic reset
+                // on close must not re-enter edit mode (would hide the SHA badge)
+              }}
+              // fired on click or keyboard-select of an item (incl. the custom entry)
+              onValueChange={(value: string | null) => {
+                if (value) commitRef(value)
+              }}
+              openOnInputClick
             >
-              <div className="relative" ref={anchorRef}>
-                <CommandPrimitive.Input
+              <InputGroup className="h-8 min-w-0 flex-1">
+                <Combobox.Input
                   ref={inputRef}
-                  value={ref}
-                  onValueChange={(value) => {
-                    setRef(value)
-                    draft.current = value
-                    setDirty(true)
-                    setOpen(true)
-                    setEditing(true)
-                  }}
+                  data-slot="input-group-control"
                   onFocus={() => {
                     setEditing(true)
                     setDirty(false)
-                    setOpen(true)
                   }}
+                  // Tab / click-away deploys the typed ref; commitRef dedupes so
+                  // this never double-deploys after an item was selected
                   onBlur={() => commitRef(draft.current)}
                   onKeyDown={(e) => {
                     if (e.key === 'Escape') {
@@ -286,82 +279,134 @@ export const ServiceRow = memo(function ServiceRow({
                   aria-label={`Target branch for ${application.name} in ${environmentName}`}
                   aria-invalid={showRefError}
                   aria-describedby={showRefError ? errorId : undefined}
-                  className={cn(
-                    'border-input h-8 w-full rounded-md border bg-transparent px-3 py-1 text-sm outline-none transition-[color,box-shadow]',
-                    'placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
-                    'aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive',
-                    'dark:bg-input/30',
-                    (deploying || (!editing && boundSha)) && 'pr-16'
-                  )}
+                  className="h-full min-w-0 flex-1 overflow-hidden border-0 bg-transparent px-3 text-sm text-ellipsis shadow-none outline-none focus-visible:ring-0 dark:bg-transparent"
                 />
-                <div className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1.5">
-                  {!editing && boundSha && (
+                {!editing && boundSha && (
+                  <InputGroupAddon align="inline-end" className="pointer-events-none">
                     <span className="font-mono text-xs text-muted-foreground">{boundSha}</span>
-                  )}
-                  {deploying && (
+                  </InputGroupAddon>
+                )}
+                {deploying && (
+                  <InputGroupAddon align="inline-end" className="pointer-events-none">
                     <Loader2
                       aria-label="Deployment in progress"
-                      className="h-4 w-4 animate-spin text-muted-foreground"
+                      className="size-4 animate-spin text-muted-foreground"
                     />
-                  )}
-                </div>
-              </div>
-              {open &&
-                menuRect &&
-                createPortal(
-                  <CommandList
-                    // keep focus in the input so selecting an item doesn't blur-deploy first
-                    onMouseDown={(e) => e.preventDefault()}
-                    style={{
-                      position: 'fixed',
-                      top: menuRect.top + 4,
-                      left: menuRect.left,
-                      width: menuRect.width,
-                    }}
-                    className="z-50 max-h-64 overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-md"
-                  >
-                    {orderedRefs.map((knownRef) => (
-                      <CommandItem
-                        key={knownRef.ref}
-                        value={knownRef.ref}
-                        onSelect={commitRef}
-                        title={knownRef.ref}
-                      >
-                        {knownRef.type === 'tag' ? (
-                          <Tag className="mr-1 h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
-                        ) : (
-                          <GitBranch className="mr-1 h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
-                        )}
-                        <span className="min-w-0 flex-1 truncate">{knownRef.ref}</span>
-                        {knownRef.commit?.sha && (
-                          <span className="ml-2 font-mono text-xs text-muted-foreground">
-                            {knownRef.commit.sha.slice(0, 7)}
-                          </span>
-                        )}
-                      </CommandItem>
-                    ))}
-                    {isCustomRef && (
-                      <CommandItem value={trimmedRef} onSelect={commitRef} title={trimmedRef}>
-                        <span className="min-w-0 flex-1 truncate">{trimmedRef}</span>
-                        <span className="ml-1 shrink-0 text-muted-foreground">
-                          {shaLike ? '(commit)' : '(custom ref)'}
-                        </span>
-                      </CommandItem>
-                    )}
-                  </CommandList>,
-                  document.body
+                  </InputGroupAddon>
                 )}
-            </Command>
+              </InputGroup>
+              <Combobox.Portal>
+                <Combobox.Positioner sideOffset={4} align="start" className="z-50">
+                  <Combobox.Popup className="max-h-64 w-[var(--anchor-width)] overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
+                    <Combobox.Empty className="px-2 py-1.5 text-sm text-muted-foreground empty:hidden">
+                      No matching refs
+                    </Combobox.Empty>
+                    <Combobox.List>
+                      {displayedRefs.map((knownRef) => (
+                        <Combobox.Item
+                          key={knownRef.ref}
+                          value={knownRef.ref}
+                          title={knownRef.ref}
+                          className="relative flex cursor-default items-center gap-1 rounded-sm px-2 py-1.5 text-sm outline-none select-none data-highlighted:bg-muted"
+                        >
+                          {knownRef.type === 'tag' ? (
+                            <Tag className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+                          ) : (
+                            <GitBranch className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+                          )}
+                          <span className="min-w-0 flex-1 truncate">{knownRef.ref}</span>
+                          {knownRef.commit?.sha && (
+                            <span className="ml-2 font-mono text-xs text-muted-foreground">
+                              {knownRef.commit.sha.slice(0, 7)}
+                            </span>
+                          )}
+                        </Combobox.Item>
+                      ))}
+                      {isCustomRef && (
+                        <Combobox.Item
+                          value={trimmedRef}
+                          title={trimmedRef}
+                          className="relative flex cursor-default items-center gap-1 rounded-sm px-2 py-1.5 text-sm outline-none select-none data-highlighted:bg-muted"
+                        >
+                          <span className="min-w-0 flex-1 truncate">{trimmedRef}</span>
+                          <span className="ml-1 shrink-0 text-muted-foreground">
+                            {shaLike ? '(commit)' : '(custom ref)'}
+                          </span>
+                        </Combobox.Item>
+                      )}
+                    </Combobox.List>
+                  </Combobox.Popup>
+                </Combobox.Positioner>
+              </Combobox.Portal>
+            </Combobox.Root>
             )}
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`Branch switch history for ${application.name} in ${environmentName}`}
-              title="Branch switch history"
-              onClick={() => setHistoryOpen(true)}
-            >
-              <History className="h-4 w-4" aria-hidden="true" />
-            </Button>
+            {/* clickable avatar stack (always two slots reserved, left-aligned),
+                one tooltip over the whole control */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={`Branch switch history for ${application.name} in ${environmentName}`}
+                      onClick={() => setHistoryOpen(true)}
+                      className="flex shrink-0 cursor-pointer items-center rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {/* pointer-events-none so hover is tracked on the button
+                          only — otherwise the cursor crossing between the two
+                          overlapping avatars flickers the tooltip */}
+                      <span className="pointer-events-none flex items-center">
+                        {/* first avatar: the last user, or the History icon when
+                            there's no recorded change */}
+                        {lastSwitch?.updatedBy ? (
+                          <UserAvatar
+                            className="relative z-10 size-6 ring-2 ring-background"
+                            name={
+                              lastSwitch.updatedBy.fullName || lastSwitch.updatedBy.userIdentifier
+                            }
+                            email={lastSwitch.updatedBy.email}
+                          />
+                        ) : (
+                          <Avatar
+                            className="relative z-10 size-6 ring-2 ring-background"
+                            aria-hidden="true"
+                          >
+                            <AvatarFallback className="bg-muted">
+                              <History className="size-3.5 text-muted-foreground" />
+                            </AvatarFallback>
+                          </Avatar>
+                        )}
+                        {/* second avatar: always an empty circle, barely peeking
+                            out behind the first */}
+                        <Avatar
+                          className="-ml-[18px] size-6 ring-2 ring-background"
+                          aria-hidden="true"
+                        >
+                          <AvatarFallback className="bg-muted" />
+                        </Avatar>
+                      </span>
+                    </button>
+                  }
+                />
+                <TooltipContent>
+                  {lastSwitch?.updatedBy ? (
+                    <span className="flex flex-col leading-tight">
+                      <span className="font-medium">
+                        {lastSwitch.updatedBy.fullName || lastSwitch.updatedBy.userIdentifier}
+                      </span>
+                      {lastSwitch.time && (
+                        <span className="text-background/70">
+                          {timeAgo(new Date(lastSwitch.time))}
+                        </span>
+                      )}
+                      <span className="text-background/70">Open branch change history</span>
+                    </span>
+                  ) : (
+                    'Open branch change history'
+                  )}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             </div>
             {historyOpen && (
               <RefSwitchLogDialog

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { initialsOf, useGravatar } from '@/lib/gravatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { avatarColor, initialsOf, useGravatar } from '@/lib/gravatar'
 import { cn } from '@/lib/utils'
 
 interface UserCellProps {
@@ -19,24 +19,17 @@ export function UserAvatar({
   className?: string
 }) {
   const avatar = useGravatar(email, 64)
-  const [imgFailed, setImgFailed] = useState(false)
-  return avatar && !imgFailed ? (
-    <img
-      src={avatar}
-      alt=""
-      onError={() => setImgFailed(true)}
-      className={cn('size-7 shrink-0 rounded-full bg-muted object-cover', className)}
-    />
-  ) : (
-    <span
-      aria-hidden="true"
-      className={cn(
-        'flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold leading-none text-primary',
-        className
-      )}
-    >
-      {initialsOf(name || email)}
-    </span>
+  const initials = initialsOf(name || email)
+  return (
+    <Avatar className={cn('size-7', className)}>
+      {avatar && <AvatarImage src={avatar} alt="" />}
+      <AvatarFallback
+        className="text-[10px] font-semibold text-white"
+        style={{ backgroundColor: avatarColor(initials) }}
+      >
+        {initials}
+      </AvatarFallback>
+    </Avatar>
   )
 }
 

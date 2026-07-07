@@ -126,8 +126,9 @@ func (r *refService) SaveBinding(refBinding *api.RefBinding, actor auth.Actor) (
 	if err != nil {
 		return nil, err
 	}
+	now := time.Now()
 	r.auditLog.Record(RefSwitch{
-		Time:           time.Now(),
+		Time:           now,
 		Environment:    refBinding.Environment,
 		Application:    refBinding.Application,
 		OldRef:         oldRef,
@@ -149,6 +150,7 @@ func (r *refService) SaveBinding(refBinding *api.RefBinding, actor auth.Actor) (
 				FullName:       actor.FullName,
 				Email:          actor.Email,
 			},
+			Time: now.Format(time.RFC3339),
 		},
 		Event: "UPDATED",
 	})

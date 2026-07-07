@@ -23,6 +23,8 @@ type AuditLog interface {
 	Record(s RefSwitch)
 	Find(environment string, application string) []RefSwitch
 	FindAll() []RefSwitch
+	// Latest returns the most recent switch for each env-application pair.
+	Latest() []RefSwitch
 }
 
 // ponytail: in-memory by design — the per-key cap and max age keep it bounded.
@@ -69,6 +71,20 @@ func (a *auditLog) Find(environment string, application string) []RefSwitch {
 	list := trimExpired(a.switches[environment+"-"+application], time.Now())
 	result := make([]RefSwitch, len(list))
 	copy(result, list)
+	return result
+}
+
+func (a *auditLog) Latest() []RefSwitch {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	now := time.Now()
+	result := []RefSwitch{}
+	for _, list := range a.switches {
+		// lists are newest-first; the first non-expired entry is the latest
+		if live := trimExpired(list, now); len(live) > 0 {
+			result = append(result, live[0])
+		}
+	}
 	return result
 }
 

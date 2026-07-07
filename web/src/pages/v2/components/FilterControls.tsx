@@ -2,10 +2,10 @@ import React from 'react'
 import { Application, Environment } from '@/axios'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { MultiSelectFilter } from './MultiSelectFilter'
 import {
   Eye,
-  EyeOff,
   GitBranch,
   Layers,
   ListChevronsUpDown,
@@ -89,24 +89,65 @@ export function FilterControls({
         onToggle={onToggleEnvironmentFilter}
         onClear={onClearEnvironmentFilter}
       />
-      <div className="flex gap-2 ml-auto">
-        <Button
-          variant={notifyEnabled ? 'default' : 'outline'}
-          size="sm"
-          onClick={onToggleNotify}
-          title="Notify about changes in current view"
-          aria-label="Notify about changes in current view"
-          aria-pressed={notifyEnabled}
-        >
-          {notifyEnabled ? <Eye aria-hidden="true" /> : <EyeOff aria-hidden="true" />}
-        </Button>
-        <Button variant="outline" size="sm" onClick={onExpandAll} title="Expand All" aria-label="Expand all environments">
-          <ListChevronsUpDown aria-hidden="true" />
-        </Button>
-        <Button variant="outline" size="sm" onClick={onCollapseAll} title="Collapse All" aria-label="Collapse all environments">
-          <ListChevronsDownUp aria-hidden="true" />
-        </Button>
-      </div>
+      <TooltipProvider>
+        <div className="flex gap-2 ml-auto">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant={notifyEnabled ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={onToggleNotify}
+                  aria-label="Watch for changes in current view"
+                  aria-pressed={notifyEnabled}
+                  className="relative"
+                >
+                  <Eye aria-hidden="true" />
+                  Watch
+                  {notifyEnabled && (
+                    // pulsing "live" dot, one ping every 2s
+                    <span className="pointer-events-none absolute -right-1 -top-1 flex size-2.5">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75 [animation-duration:2s]" />
+                      <span className="relative inline-flex size-2.5 rounded-full bg-emerald-500" />
+                    </span>
+                  )}
+                </Button>
+              }
+            />
+            <TooltipContent>Notify about branch changes in the current view</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onExpandAll}
+                  aria-label="Expand all environments"
+                >
+                  <ListChevronsUpDown aria-hidden="true" />
+                </Button>
+              }
+            />
+            <TooltipContent>Expand all</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onCollapseAll}
+                  aria-label="Collapse all environments"
+                >
+                  <ListChevronsDownUp aria-hidden="true" />
+                </Button>
+              }
+            />
+            <TooltipContent>Collapse all</TooltipContent>
+          </Tooltip>
+        </div>
+      </TooltipProvider>
     </div>
   )
 }

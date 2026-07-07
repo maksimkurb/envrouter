@@ -36,7 +36,7 @@ export function RefSwitchLogDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>
             Branch switch history — {applicationName} · {environmentName}

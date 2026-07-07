@@ -16,6 +16,8 @@ export function useDashboardData(onRefBindingUpdate?: (binding: RefBindingUpdate
   const [instances, setInstances] = useState<Map<string, Instance>>(new Map())
   const [instancePods, setInstancePods] = useState<Map<string, InstancePod>>(new Map())
   const [refsHeads, setRefsHeads] = useState<Map<string, Ref>>(new Map())
+  // env-app -> latest switch (who + when), for the per-row avatar
+  const [lastSwitches, setLastSwitches] = useState<Map<string, RefBindingUpdate>>(new Map())
   const [defaultRef, setDefaultRef] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -94,6 +96,17 @@ export function useDashboardData(onRefBindingUpdate?: (binding: RefBindingUpdate
         }
         return next
       })
+      setLastSwitches((current) => {
+        let next: Map<string, RefBindingUpdate> | null = null
+        for (const e of events) {
+          if (e.itemType !== 'RefBinding' || e.event !== 'UPDATED') continue
+          const b = e.item as RefBindingUpdate
+          if (!b.updatedBy) continue
+          if (!next) next = new Map(current)
+          next.set(`${b.environment}-${b.application}`, b)
+        }
+        return next ?? current
+      })
       for (const e of events) {
         if (e.itemType !== 'RefBinding' || e.event !== 'UPDATED') continue
         onRefBindingUpdateRef.current?.(e.item as RefBindingUpdate)
@@ -130,6 +143,11 @@ export function useDashboardData(onRefBindingUpdate?: (binding: RefBindingUpdate
           setInstancePods(new Map((snapshot.instancePods ?? []).map((p) => [p.name, p])))
           setRefsHeads(
             new Map((snapshot.refsHeads ?? []).map((r) => [`${r.repository}-${r.ref}`, r]))
+          )
+          setLastSwitches(
+            new Map(
+              (snapshot.lastSwitches ?? []).map((s) => [`${s.environment}-${s.application}`, s])
+            )
           )
           setDefaultRef(snapshot.defaultRef ?? '')
           setLoading(false)
@@ -173,6 +191,7 @@ export function useDashboardData(onRefBindingUpdate?: (binding: RefBindingUpdate
     instances,
     instancePods,
     refsHeads,
+    lastSwitches,
     defaultRef,
     updateRefBinding,
     loading,

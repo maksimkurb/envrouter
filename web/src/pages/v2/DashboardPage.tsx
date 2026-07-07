@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast as sonnerToast } from 'sonner'
-import { MoveRight } from 'lucide-react'
+import { Eye, MoveRight } from 'lucide-react'
 import { Ref } from '@/axios'
 import { RefBindingUpdate } from '@/sse/api'
 import { Table, TableBody } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { gravatarUrl } from '@/lib/gravatar'
+import { copyToClipboard } from '@/lib/clipboard'
 import { useDashboardData } from '@/hooks/useDashboardData'
 import { useAuthContext } from '@/hooks/useAuth'
 import { useEnvironmentState } from '@/hooks/useEnvironmentState'
@@ -111,6 +112,7 @@ export default function DashboardPage() {
     instances,
     instancePods,
     refsHeads,
+    lastSwitches,
     defaultRef,
     updateRefBinding,
     loading,
@@ -136,6 +138,11 @@ export default function DashboardPage() {
     const enable = () => {
       setNotifyView(true)
       localStorage.setItem(NOTIFY_STORAGE_KEY, 'on')
+      sonnerToast('Watching for changes', {
+        description:
+          'You’ll get a notification when someone switches a branch in the currently visible rows. Use the filters above to choose what you watch.',
+        icon: <Eye className="h-4 w-4" aria-hidden="true" />,
+      })
     }
     if (!('Notification' in window)) {
       sonnerToast.error('This browser does not support notifications')
@@ -219,22 +226,41 @@ export default function DashboardPage() {
     }, 1700) // slightly past the 2×0.8s blink so the class outlives the animation
 
     const name = who.fullName || who.userIdentifier
+    // Custom layout instead of sonner's icon/description slots: those pin the
+    // avatar to the vertical center of a tall wrapped description. items-start
+    // keeps it beside the title, and refs stack old→new like the history table.
     sonnerToast(
-      <span>
-        <span className="font-medium">{name}</span> switched {binding.application} @{' '}
-        {binding.environment}
-      </span>,
+      <div className="flex w-full items-start gap-2.5">
+        <UserAvatar name={name} email={who.email} className="mt-0.5 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <div>
+            <span className="font-medium">{name}</span> switched {binding.application} @{' '}
+            {binding.environment}
+          </div>
+          {/* stacked old→new like the history table; click a ref to copy it */}
+          <div className="mt-1 min-w-0 font-mono text-xs leading-tight">
+            <button
+              type="button"
+              onClick={() => copyToClipboard(binding.oldRef ?? '')}
+              disabled={!binding.oldRef}
+              title={binding.oldRef ? `Copy ${binding.oldRef}` : undefined}
+              className="block w-full cursor-pointer truncate text-left text-muted-foreground/60 hover:text-foreground disabled:cursor-default disabled:hover:text-muted-foreground/60"
+            >
+              {binding.oldRef || '—'}
+            </button>
+            <button
+              type="button"
+              onClick={() => copyToClipboard(binding.ref)}
+              title={`Copy ${binding.ref}`}
+              className="flex w-full min-w-0 cursor-pointer items-center gap-1 text-left hover:text-foreground"
+            >
+              <MoveRight className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <span className="truncate">{binding.ref}</span>
+            </button>
+          </div>
+        </div>
+      </div>,
       {
-        // sonner pins [data-icon] to 16px — .ref-switch-toast (index.css) widens it
-        className: 'ref-switch-toast',
-        icon: <UserAvatar name={name} email={who.email} />,
-        description: (
-          <span className="inline-flex items-center gap-1 font-mono">
-            {binding.oldRef || '—'}
-            <MoveRight className="h-3 w-3" aria-hidden="true" />
-            {binding.ref}
-          </span>
-        ),
         duration: 60_000,
         closeButton: true,
       }
@@ -340,6 +366,7 @@ export default function DashboardPage() {
                             defaultRef={defaultRef}
                             canDeploy={canDeploy}
                             highlight={highlighted.has(key)}
+                            lastSwitch={lastSwitches.get(key)}
                             onRefBindingChanged={updateRefBinding}
                           />
                         )
