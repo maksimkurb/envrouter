@@ -28,20 +28,28 @@ export function useAuth(): AuthInfo | null {
   const [auth, setAuth] = useState<AuthInfo | null>(null)
 
   useEffect(() => {
-    axios
-      .get<AuthInfo>(`${BASE_PATH}/auth/userinfo`)
-      .then((response) => {
-        if (response.data.enabled && !response.data.authenticated) {
-          redirectToLogin()
-          return
-        }
-        setAuth(response.data)
-      })
-      .catch(() => {
-        // backend unreachable — proceed unauthenticated; data hooks surface
-        // their own connection errors
-        setAuth({ enabled: false, authenticated: false })
-      })
+    const fetchUserinfo = () =>
+      axios
+        .get<AuthInfo>(`${BASE_PATH}/auth/userinfo`)
+        .then((response) => {
+          if (response.data.enabled && !response.data.authenticated) {
+            redirectToLogin()
+            return
+          }
+          setAuth(response.data)
+        })
+        .catch(() => {
+          // backend unreachable — proceed unauthenticated; data hooks surface
+          // their own connection errors
+          setAuth({ enabled: false, authenticated: false })
+        })
+
+    fetchUserinfo()
+    // Poll every 5 min: keeps the server-side session fresh (each userinfo
+    // call refreshes the ID token before it expires) and redirects to login
+    // once the refresh token is gone.
+    const id = setInterval(fetchUserinfo, 5 * 60_000)
+    return () => clearInterval(id)
   }, [])
 
   return auth

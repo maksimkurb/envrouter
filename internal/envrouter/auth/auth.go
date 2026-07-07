@@ -3,6 +3,12 @@
 // ENVROUTER_OIDC_ISSUER; without it every request passes through with an
 // anonymous actor. Sessions are cookie-based (the raw ID token in an
 // HttpOnly cookie) because EventSource cannot send Authorization headers.
+//
+// When the provider issues a refresh token (Keycloak by default; providers
+// like Authelia require "offline_access" in ENVROUTER_OIDC_SCOPES), it is
+// stored in a second HttpOnly cookie and used to silently mint a fresh ID
+// token as the current one nears expiry, keeping the session alive without a
+// re-login round-trip. Cookie Max-Age tracks the real token lifetimes.
 package auth
 
 import (
@@ -15,6 +21,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gin-gonic/gin"
@@ -24,8 +31,15 @@ import (
 
 const (
 	sessionCookie = "envrouter_session"
+	refreshCookie = "envrouter_refresh"
 	stateCookie   = "envrouter_oauth_state"
 	actorKey      = "envrouter_actor"
+
+	// refreshSkew: proactively refresh once less than this remains on the ID
+	// token. ponytail: coupled to the frontend's 5-minute userinfo poll — one
+	// poll always lands inside this window, so the token refreshes before it
+	// expires. Bump both together if the poll interval changes.
+	refreshSkew = 6 * time.Minute
 )
 
 // Actor identifies who performs an API request.
@@ -148,8 +162,10 @@ func (s *Service) permitted(a Actor, group string) bool {
 
 // Levels are hierarchical: configure ⊃ deploy ⊃ view, so an admin needs only
 // the configure group, an editor only the deploy group.
-func (s *Service) CanView(a Actor) bool      { return s.permitted(a, s.cfg.GroupView) || s.CanDeploy(a) }
-func (s *Service) CanDeploy(a Actor) bool    { return s.permitted(a, s.cfg.GroupDeploy) || s.CanConfigure(a) }
+func (s *Service) CanView(a Actor) bool { return s.permitted(a, s.cfg.GroupView) || s.CanDeploy(a) }
+func (s *Service) CanDeploy(a Actor) bool {
+	return s.permitted(a, s.cfg.GroupDeploy) || s.CanConfigure(a)
+}
 func (s *Service) CanConfigure(a Actor) bool { return s.permitted(a, s.cfg.GroupConfigure) }
 
 // safeRedirect sanitizes the `rd` param to a same-site absolute path, defeating
@@ -205,14 +221,14 @@ func containsString(list []string, v string) bool {
 	return false
 }
 
-func (s *Service) actorFromIDToken(ctx context.Context, rawIDToken string) (Actor, error) {
+func (s *Service) actorFromIDToken(ctx context.Context, rawIDToken string) (Actor, time.Time, error) {
 	idToken, err := s.verifier.Verify(ctx, rawIDToken)
 	if err != nil {
-		return Actor{}, err
+		return Actor{}, time.Time{}, err
 	}
 	claims := map[string]interface{}{}
 	if err := idToken.Claims(&claims); err != nil {
-		return Actor{}, err
+		return Actor{}, time.Time{}, err
 	}
 	actor := Actor{
 		UserIdentifier: resolveClaim(claims, s.cfg.ClaimUserID),
@@ -221,7 +237,104 @@ func (s *Service) actorFromIDToken(ctx context.Context, rawIDToken string) (Acto
 		Groups:         resolveClaimSlice(claims, s.cfg.ClaimGroups),
 	}
 	if actor.UserIdentifier == "" {
-		return Actor{}, fmt.Errorf("none of the claims %v yielded a user identifier", s.cfg.ClaimUserID)
+		return Actor{}, time.Time{}, fmt.Errorf("none of the claims %v yielded a user identifier", s.cfg.ClaimUserID)
+	}
+	return actor, idToken.Expiry, nil
+}
+
+// setSessionCookies writes the session (ID token) and, when present, refresh
+// cookies with Max-Age matching the real token lifetimes: the browser drops
+// each cookie exactly when its token expires.
+func (s *Service) setSessionCookies(c *gin.Context, rawIDToken string, idExpiry time.Time, token *oauth2.Token) {
+	secure := !s.cfg.InsecureCookie
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(sessionCookie, rawIDToken, int(time.Until(idExpiry).Seconds()), "/", "", secure, true)
+	if token != nil && token.RefreshToken != "" {
+		// OIDC does not expose refresh-token expiry in a standard claim;
+		// Keycloak sends refresh_expires_in. Absent that, use a browser-session
+		// cookie (Max-Age 0) so it lives until the browser closes.
+		maxAge := 0
+		if v, ok := token.Extra("refresh_expires_in").(float64); ok && v > 0 {
+			maxAge = int(v)
+		}
+		c.SetCookie(refreshCookie, token.RefreshToken, maxAge, "/", "", secure, true)
+	}
+}
+
+// clearSessionCookies removes both auth cookies (used on logout and on a failed
+// mandatory refresh).
+func (s *Service) clearSessionCookies(c *gin.Context) {
+	secure := !s.cfg.InsecureCookie
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(sessionCookie, "", -1, "/", "", secure, true)
+	c.SetCookie(refreshCookie, "", -1, "/", "", secure, true)
+}
+
+// refresh redeems the refresh token for a new ID token, verifies it, and
+// re-issues both cookies. Returns the new actor on success.
+func (s *Service) refresh(c *gin.Context, refreshToken string) (Actor, error) {
+	token, err := s.oauth.TokenSource(c.Request.Context(), &oauth2.Token{RefreshToken: refreshToken}).Token()
+	if err != nil {
+		return Actor{}, fmt.Errorf("refresh token exchange failed: %w", err)
+	}
+	rawIDToken, ok := token.Extra("id_token").(string)
+	if !ok {
+		return Actor{}, errors.New("refresh response contained no id_token")
+	}
+	actor, idExpiry, err := s.actorFromIDToken(c.Request.Context(), rawIDToken)
+	if err != nil {
+		return Actor{}, fmt.Errorf("refreshed id_token rejected: %w", err)
+	}
+	s.setSessionCookies(c, rawIDToken, idExpiry, token)
+	return actor, nil
+}
+
+// actorFromSession resolves the request actor from the session cookie,
+// refreshing the ID token when it is expired or close to expiry. On a
+// mandatory-but-failed refresh it clears the cookies and returns the error so
+// callers fall through to the 401 path.
+//
+// ponytail: concurrent tabs may race on refresh-token rotation — the loser gets
+// a 401 and the SPA re-logs in (usually silent via the IdP's SSO cookie).
+// Upgrade path: single-flight per session if that ever becomes noticeable.
+func (s *Service) actorFromSession(c *gin.Context) (Actor, error) {
+	rawIDToken, cookieErr := c.Cookie(sessionCookie)
+	if cookieErr == nil {
+		actor, idExpiry, err := s.actorFromIDToken(c.Request.Context(), rawIDToken)
+		if err == nil {
+			if time.Until(idExpiry) > refreshSkew {
+				return actor, nil
+			}
+			// Valid but expiring soon: try to refresh, but keep the working
+			// session if refresh fails — don't kill a still-valid token.
+			if rt, err := c.Cookie(refreshCookie); err == nil {
+				if refreshed, err := s.refresh(c, rt); err == nil {
+					return refreshed, nil
+				} else {
+					log.Warnf("proactive token refresh failed, using still-valid session: %v", err)
+				}
+			}
+			return actor, nil
+		}
+		// Only an expired token is refreshable; tampered/invalid tokens are not.
+		var expiredErr *oidc.TokenExpiredError
+		if !errors.As(err, &expiredErr) {
+			return Actor{}, err
+		}
+	}
+	// Session token is expired, or its cookie already dropped at Max-Age.
+	// Refresh is mandatory here; without a refresh cookie there's nothing to do.
+	rt, err := c.Cookie(refreshCookie)
+	if err != nil {
+		if cookieErr != nil {
+			return Actor{}, cookieErr
+		}
+		return Actor{}, errors.New("session expired and no refresh token available")
+	}
+	actor, err := s.refresh(c, rt)
+	if err != nil {
+		s.clearSessionCookies(c)
+		return Actor{}, err
 	}
 	return actor, nil
 }
@@ -235,12 +348,7 @@ func (s *Service) Middleware() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		rawIDToken, err := c.Cookie(sessionCookie)
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
-			return
-		}
-		actor, err := s.actorFromIDToken(c.Request.Context(), rawIDToken)
+		actor, err := s.actorFromSession(c)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "session invalid or expired"})
 			return
@@ -320,7 +428,8 @@ func (s *Service) CallbackHandler(c *gin.Context) {
 		c.String(http.StatusBadGateway, "identity provider returned no id_token")
 		return
 	}
-	if _, err := s.actorFromIDToken(c.Request.Context(), rawIDToken); err != nil {
+	_, idExpiry, err := s.actorFromIDToken(c.Request.Context(), rawIDToken)
+	if err != nil {
 		log.Errorf("OIDC id_token rejected: %v", err)
 		c.String(http.StatusUnauthorized, "identity token rejected: %v", err)
 		return
@@ -328,17 +437,13 @@ func (s *Service) CallbackHandler(c *gin.Context) {
 	// no CanView rejection here: the session is issued even for group-less
 	// users so the SPA can show its access-denied screen (userinfo reports
 	// canView=false); the API middleware 403s all their data requests
-	c.SetSameSite(http.SameSiteLaxMode)
-	// session cookie (no Max-Age): the ID token's own expiry is enforced on
-	// every request by the verifier
-	c.SetCookie(sessionCookie, rawIDToken, 0, "/", "", !s.cfg.InsecureCookie, true)
+	s.setSessionCookies(c, rawIDToken, idExpiry, token)
 	c.SetCookie(stateCookie, "", -1, "/", "", !s.cfg.InsecureCookie, true)
 	c.Redirect(http.StatusFound, rd)
 }
 
 func (s *Service) LogoutHandler(c *gin.Context) {
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(sessionCookie, "", -1, "/", "", !s.cfg.InsecureCookie, true)
+	s.clearSessionCookies(c)
 	c.Status(http.StatusNoContent)
 }
 
@@ -353,21 +458,19 @@ func (s *Service) UserinfoHandler(c *gin.Context) {
 		})
 		return
 	}
-	if rawIDToken, err := c.Cookie(sessionCookie); err == nil {
-		if actor, err := s.actorFromIDToken(c.Request.Context(), rawIDToken); err == nil {
-			c.JSON(http.StatusOK, gin.H{
-				"enabled":        true,
-				"authenticated":  true,
-				"userIdentifier": actor.UserIdentifier,
-				"fullName":       actor.FullName,
-				"email":          actor.Email,
-				"groups":         actor.Groups,
-				"canView":        s.CanView(actor),
-				"canDeploy":      s.CanDeploy(actor),
-				"canConfigure":   s.CanConfigure(actor),
-			})
-			return
-		}
+	if actor, err := s.actorFromSession(c); err == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"enabled":        true,
+			"authenticated":  true,
+			"userIdentifier": actor.UserIdentifier,
+			"fullName":       actor.FullName,
+			"email":          actor.Email,
+			"groups":         actor.Groups,
+			"canView":        s.CanView(actor),
+			"canDeploy":      s.CanDeploy(actor),
+			"canConfigure":   s.CanConfigure(actor),
+		})
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"enabled":       true,

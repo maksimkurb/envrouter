@@ -40,7 +40,7 @@ EnvRouter can require login through any OIDC discovery-compliant provider
 | `ENVROUTER_OIDC_CLIENT_ID` | — | OAuth client id (required when issuer set) |
 | `ENVROUTER_OIDC_CLIENT_SECRET` | — | OAuth client secret |
 | `ENVROUTER_OIDC_REDIRECT_URL` | — | Public callback URL, e.g. `https://envrouter.example.com/auth/callback` (required when issuer set) |
-| `ENVROUTER_OIDC_SCOPES` | `openid profile email` | Requested scopes |
+| `ENVROUTER_OIDC_SCOPES` | `openid profile email` | Requested scopes. Add `offline_access` to keep sessions alive via refresh tokens on providers that gate them behind it (e.g. Authelia); Keycloak issues refresh tokens without it. |
 | `ENVROUTER_OIDC_CLAIM_USER_IDENTIFIER` | `preferred_username,sub` | Comma-separated claim fallback list for the user identifier (required field; login is rejected if all claims are empty) |
 | `ENVROUTER_OIDC_CLAIM_FULLNAME` | `name` | Claim fallback list for the display name |
 | `ENVROUTER_OIDC_CLAIM_EMAIL` | `email` | Claim fallback list for the email |
