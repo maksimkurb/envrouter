@@ -21,6 +21,8 @@ interface ServiceRowProps {
   refsHeads: Ref[]
   defaultRef: string
   canDeploy: boolean
+  // two green blinks when someone else just switched this row's branch
+  highlight?: boolean
   onRefBindingChanged: (refBinding: RefBinding) => void
 }
 
@@ -35,6 +37,7 @@ export const ServiceRow = memo(function ServiceRow({
   refsHeads,
   defaultRef,
   canDeploy,
+  highlight,
   onRefBindingChanged,
 }: ServiceRowProps) {
   const { toast } = useToast()
@@ -49,6 +52,10 @@ export const ServiceRow = memo(function ServiceRow({
   const [historyOpen, setHistoryOpen] = useState(false)
   // blur handlers fire before state updates land — mirror the draft in a ref
   const draft = useRef(boundRef)
+  // async .catch must revert to the CURRENT binding, not the render-time
+  // closure value (an SSE update may have landed while the POST was in flight)
+  const boundRefLive = useRef(boundRef)
+  boundRefLive.current = boundRef
   // Enter deploys via onSelect and the following blur must not deploy again
   const lastDeployed = useRef<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -92,8 +99,8 @@ export const ServiceRow = memo(function ServiceRow({
       })
       .catch((err) => {
         lastDeployed.current = null
-        setRef(boundRef)
-        draft.current = boundRef
+        setRef(boundRefLive.current)
+        draft.current = boundRefLive.current
         toast({
           title:
             err?.response?.status === 403
@@ -137,7 +144,7 @@ export const ServiceRow = memo(function ServiceRow({
 
   return (
     <Fragment>
-      <TableRow>
+      <TableRow className={cn(highlight && 'ref-updated-blink')}>
         <TableCell>
           {canExpand && (
             <button

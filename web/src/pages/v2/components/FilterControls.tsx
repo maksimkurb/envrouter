@@ -4,6 +4,8 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { MultiSelectFilter } from './MultiSelectFilter'
 import {
+  Eye,
+  EyeOff,
   GitBranch,
   Layers,
   ListChevronsUpDown,
@@ -25,6 +27,8 @@ interface FilterControlsProps {
   onClearServiceFilter: () => void
   onExpandAll: () => void
   onCollapseAll: () => void
+  notifyEnabled: boolean
+  onToggleNotify: () => void
 }
 
 export function FilterControls({
@@ -40,6 +44,8 @@ export function FilterControls({
   onClearServiceFilter,
   onExpandAll,
   onCollapseAll,
+  notifyEnabled,
+  onToggleNotify,
 }: FilterControlsProps) {
   return (
     <div className="flex gap-4 items-center flex-wrap">
@@ -84,6 +90,16 @@ export function FilterControls({
         onClear={onClearEnvironmentFilter}
       />
       <div className="flex gap-2 ml-auto">
+        <Button
+          variant={notifyEnabled ? 'default' : 'outline'}
+          size="sm"
+          onClick={onToggleNotify}
+          title="Notify about changes in current view"
+          aria-label="Notify about changes in current view"
+          aria-pressed={notifyEnabled}
+        >
+          {notifyEnabled ? <Eye aria-hidden="true" /> : <EyeOff aria-hidden="true" />}
+        </Button>
         <Button variant="outline" size="sm" onClick={onExpandAll} title="Expand All" aria-label="Expand all environments">
           <ListChevronsUpDown aria-hidden="true" />
         </Button>

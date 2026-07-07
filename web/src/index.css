@@ -129,3 +129,18 @@
     @apply font-sans;
   }
 }
+/* row flash when someone else switches a branch (two green blinks) */
+@keyframes ref-updated-blink {
+  0%, 100% { background-color: transparent; }
+  50% { background-color: rgb(34 197 94 / 0.25); }
+}
+.ref-updated-blink {
+  animation: ref-updated-blink 0.8s ease-in-out 2;
+}
+
+/* the branch-switch toast carries a 28px avatar in the icon slot, which
+   sonner otherwise pins to 16px */
+[data-sonner-toast].ref-switch-toast [data-icon] {
+  width: 1.75rem;
+  height: 1.75rem;
+}

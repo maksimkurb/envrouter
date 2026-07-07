@@ -12,8 +12,19 @@ export interface Snapshot {
     defaultRef: string
 }
 
+// RefBinding deltas (not snapshot bindings) carry the previous ref and who
+// switched it; absent on older backends.
+export interface RefBindingUpdate extends RefBinding {
+    oldRef?: string
+    updatedBy?: {
+        userIdentifier: string
+        fullName: string
+        email: string
+    }
+}
+
 export interface SSEvent {
     itemType: "Ping" | "Instance" | "InstancePod" | "RefHead" | "RefBinding" | "Snapshot"
-    item: Instance | InstancePod | Ref | RefBinding | Snapshot,
+    item: Instance | InstancePod | Ref | RefBinding | RefBindingUpdate | Snapshot,
     event: "UPDATED" | "DELETED"
 }

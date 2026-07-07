@@ -1,8 +1,12 @@
-import React, { useEffect, useMemo, useRef } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { toast as sonnerToast } from 'sonner'
+import { MoveRight } from 'lucide-react'
 import { Ref } from '@/axios'
+import { RefBindingUpdate } from '@/sse/api'
 import { Table, TableBody } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { gravatarUrl } from '@/lib/gravatar'
 import { useDashboardData } from '@/hooks/useDashboardData'
 import { useAuthContext } from '@/hooks/useAuth'
 import { useEnvironmentState } from '@/hooks/useEnvironmentState'
@@ -12,6 +16,7 @@ import { EmptyState } from './components/EmptyState'
 import { EnvironmentRow } from './components/EnvironmentRow'
 import { DashboardTableHeader } from './components/DashboardTableHeader'
 import { ServiceRow } from './components/ServiceRow'
+import { UserAvatar } from './components/UserCell'
 
 const envAppKey = (item: { environment: string; application: string }) =>
   `${item.environment}-${item.application}`
@@ -78,7 +83,26 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
   )
 }
 
+const NOTIFY_STORAGE_KEY = 'envrouter_notify_view'
+
+// "Information_Bell" from https://github.com/akx/Notifications (CC0), see
+// public/sounds/README.txt. play() may reject under autoplay policies if the
+// user hasn't interacted with the page yet — silence is an acceptable fallback.
+const notifySound = new Audio('/sounds/Information_Bell.ogg')
+notifySound.preload = 'auto'
+
+// once per page load, not per Dashboard mount
+let soundHintShown = false
+
 export default function DashboardPage() {
+  // filled in below, once auth and filter state exist — the SSE hook only
+  // needs a stable function identity
+  const remoteUpdateRef = useRef<(binding: RefBindingUpdate) => void>(() => {})
+  const onRefBindingUpdate = useCallback(
+    (binding: RefBindingUpdate) => remoteUpdateRef.current(binding),
+    []
+  )
+
   // Data fetching and SSE subscription
   const {
     environments,
@@ -93,8 +117,39 @@ export default function DashboardPage() {
     error,
     sseError,
     reconnect,
-  } = useDashboardData()
-  const canDeploy = useAuthContext()?.canDeploy !== false
+  } = useDashboardData(onRefBindingUpdate)
+  const auth = useAuthContext()
+  const canDeploy = auth?.canDeploy !== false
+
+  // rows recently switched by someone else — carry the green blink class
+  const [highlighted, setHighlighted] = useState<Set<string>>(new Set())
+  const [notifyView, setNotifyView] = useState(
+    () => localStorage.getItem(NOTIFY_STORAGE_KEY) === 'on'
+  )
+
+  const toggleNotifyView = () => {
+    if (notifyView) {
+      setNotifyView(false)
+      localStorage.setItem(NOTIFY_STORAGE_KEY, 'off')
+      return
+    }
+    const enable = () => {
+      setNotifyView(true)
+      localStorage.setItem(NOTIFY_STORAGE_KEY, 'on')
+    }
+    if (!('Notification' in window)) {
+      sonnerToast.error('This browser does not support notifications')
+      return
+    }
+    if (Notification.permission === 'granted') {
+      enable()
+      return
+    }
+    Notification.requestPermission().then((permission) => {
+      if (permission === 'granted') enable()
+      else sonnerToast.error('Notifications are blocked by the browser')
+    })
+  }
 
   // Environment expand/collapse state
   const { expandedEnvs, toggleEnvironment, expandAll, collapseAll } = useEnvironmentState(environments)
@@ -113,6 +168,95 @@ export default function DashboardPage() {
     getApplicationsForEnv,
     hasResults,
   } = useEnvironmentFilters(environments, applications, refBindings)
+
+  // Until the user interacts with the page, autoplay policies block the
+  // notification sound — tell them so with a persistent toast that the first
+  // click/keypress (which is also what unlocks audio) dismisses. Shown at
+  // most once per page load (route changes remount this page; F5 resets it).
+  useEffect(() => {
+    if (soundHintShown || localStorage.getItem(NOTIFY_STORAGE_KEY) !== 'on') return
+    let id: string | number | undefined
+    // our effect runs before <Toaster>'s subscription in the same commit —
+    // a toast fired synchronously here would be dropped, so defer a tick.
+    // The flag is set inside the callback so StrictMode's throwaway first
+    // mount (which clears the timer in cleanup) doesn't burn the one showing.
+    const timer = setTimeout(() => {
+      soundHintShown = true
+      id = sonnerToast('Click anywhere to enable notification sounds', {
+        duration: Infinity,
+      })
+    }, 0)
+    const dismiss = () => {
+      clearTimeout(timer)
+      if (id !== undefined) sonnerToast.dismiss(id)
+    }
+    window.addEventListener('pointerdown', dismiss, { once: true })
+    window.addEventListener('keydown', dismiss, { once: true })
+    return () => {
+      dismiss()
+      window.removeEventListener('pointerdown', dismiss)
+      window.removeEventListener('keydown', dismiss)
+    }
+  }, [])
+
+  // Reacts to branch switches made by OTHER users: toast + row blink always,
+  // browser notification when the eye toggle is on and the row matches the
+  // current filters. Assigned every render so it closes over fresh state.
+  remoteUpdateRef.current = (binding) => {
+    const who = binding.updatedBy
+    // ponytail: with auth disabled everyone is anonymous — can't tell "someone
+    // else" apart, so stay silent
+    if (!who?.userIdentifier || who.userIdentifier === (auth?.userIdentifier ?? '')) return
+
+    const key = `${binding.environment}-${binding.application}`
+    setHighlighted((current) => new Set(current).add(key))
+    setTimeout(() => {
+      setHighlighted((current) => {
+        const next = new Set(current)
+        next.delete(key)
+        return next
+      })
+    }, 1700) // slightly past the 2×0.8s blink so the class outlives the animation
+
+    const name = who.fullName || who.userIdentifier
+    sonnerToast(
+      <span>
+        <span className="font-medium">{name}</span> switched {binding.application} @{' '}
+        {binding.environment}
+      </span>,
+      {
+        // sonner pins [data-icon] to 16px — .ref-switch-toast (index.css) widens it
+        className: 'ref-switch-toast',
+        icon: <UserAvatar name={name} email={who.email} />,
+        description: (
+          <span className="inline-flex items-center gap-1 font-mono">
+            {binding.oldRef || '—'}
+            <MoveRight className="h-3 w-3" aria-hidden="true" />
+            {binding.ref}
+          </span>
+        ),
+        duration: 60_000,
+        closeButton: true,
+      }
+    )
+
+    const matchesView =
+      (selectedEnvironments.size === 0 || selectedEnvironments.has(binding.environment)) &&
+      (selectedServices.size === 0 || selectedServices.has(binding.application)) &&
+      (!branchSearchQuery ||
+        binding.ref.toLowerCase().includes(branchSearchQuery.toLowerCase()))
+    if (notifyView && matchesView && 'Notification' in window && Notification.permission === 'granted') {
+      // 'mp' fallback: a browser notification can't fall back to initials
+      gravatarUrl(who.email, 128, 'mp').then((icon) => {
+        new Notification(`${name} switched ${binding.application} @ ${binding.environment}`, {
+          body: `${binding.oldRef || '—'} → ${binding.ref}`,
+          icon,
+        })
+        notifySound.currentTime = 0
+        notifySound.play().catch(() => {})
+      })
+    }
+  }
 
   // One O(N) grouping pass per data change instead of per-row filtering
   const instancesByEnvApp = useStableGrouping(instances, envAppKey)
@@ -144,6 +288,8 @@ export default function DashboardPage() {
         onClearServiceFilter={clearServiceFilter}
         onExpandAll={expandAll}
         onCollapseAll={collapseAll}
+        notifyEnabled={notifyView}
+        onToggleNotify={toggleNotifyView}
       />
 
       {sseError && !loading && !error && (
@@ -193,6 +339,7 @@ export default function DashboardPage() {
                             refsHeads={refsByRepo.get(application.repositoryName ?? '') ?? EMPTY}
                             defaultRef={defaultRef}
                             canDeploy={canDeploy}
+                            highlight={highlighted.has(key)}
                             onRefBindingChanged={updateRefBinding}
                           />
                         )

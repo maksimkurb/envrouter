@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Application, Environment, Instance, InstancePod, Ref, RefBinding } from '@/axios'
-import { Snapshot, SSEvent } from '@/sse/api'
+import { RefBindingUpdate, Snapshot, SSEvent } from '@/sse/api'
 import { useSSESubscription } from './useSSESubscription'
 
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name)
 
 // All dashboard data arrives over one SSE stream: a full Snapshot on every
 // (re)connect, then incremental deltas — no REST snapshot, no races.
-export function useDashboardData() {
+// onRefBindingUpdate fires for live RefBinding deltas only (never for
+// snapshot resyncs), so callers can react to switches as they happen.
+export function useDashboardData(onRefBindingUpdate?: (binding: RefBindingUpdate) => void) {
   const [environments, setEnvironments] = useState<Environment[]>([])
   const [applications, setApplications] = useState<Application[]>([])
   const [refBindings, setRefBindings] = useState<Map<string, RefBinding>>(new Map())
@@ -22,6 +24,9 @@ export function useDashboardData() {
   // of deltas rebuilds each Map at most once per frame instead of once per event
   const pendingRef = useRef<SSEvent[]>([])
   const rafRef = useRef<number | null>(null)
+  // kept in a ref so a changing callback doesn't resubscribe the stream
+  const onRefBindingUpdateRef = useRef(onRefBindingUpdate)
+  onRefBindingUpdateRef.current = onRefBindingUpdate
 
   const updateRefBinding = useCallback((newRefBinding: RefBinding) => {
     const key = `${newRefBinding.environment}-${newRefBinding.application}`
@@ -89,6 +94,10 @@ export function useDashboardData() {
         }
         return next
       })
+      for (const e of events) {
+        if (e.itemType !== 'RefBinding' || e.event !== 'UPDATED') continue
+        onRefBindingUpdateRef.current?.(e.item as RefBindingUpdate)
+      }
     }
   }, [])
 
