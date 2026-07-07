@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	log "github.com/sirupsen/logrus"
@@ -20,9 +21,15 @@ import (
 	"time"
 )
 
+// RefKind distinguishes a branch from a tag in the supplied refs.
+const (
+	RefKindBranch = "branch"
+	RefKindTag    = "tag"
+)
+
 type GitClient interface {
 	GetCommitByHash(repositoryName string, hash string) (*api.Commit, error)
-	SupplyRefsHeads(repositoryName string, supplier func(ref string, commit *api.Commit)) error
+	SupplyRefsHeads(repositoryName string, supplier func(ref string, commit *api.Commit, kind string)) error
 }
 
 type gitClient struct {
@@ -185,16 +192,34 @@ func (g *gitClient) getCommitByHash(repository *git.Repository, hash plumbing.Ha
 	if err != nil {
 		return nil, err
 	}
+	return commitToAPI(commit), nil
+}
+
+func commitToAPI(commit *object.Commit) *api.Commit {
 	when := commit.Author.When.Format(time.RFC3339)
 	return &api.Commit{
 		Author:    &commit.Author.Name,
 		Message:   &commit.Message,
-		Sha:       hash.String(),
+		Sha:       commit.Hash.String(),
 		Timestamp: &when,
-	}, nil
+	}
 }
 
-func (g *gitClient) SupplyRefsHeads(repositoryName string, supplier func(ref string, commit *api.Commit)) error {
+// resolveTagCommit dereferences a tag ref to its commit: an annotated tag's
+// hash points at a tag object (deref via TagObject → Commit); a lightweight
+// tag's hash points straight at the commit.
+func (g *gitClient) resolveTagCommit(repository *git.Repository, hash plumbing.Hash) (*api.Commit, error) {
+	if tag, err := repository.TagObject(hash); err == nil {
+		commit, err := tag.Commit()
+		if err != nil {
+			return nil, err
+		}
+		return commitToAPI(commit), nil
+	}
+	return g.getCommitByHash(repository, hash)
+}
+
+func (g *gitClient) SupplyRefsHeads(repositoryName string, supplier func(ref string, commit *api.Commit, kind string)) error {
 	lock := g.lockRepository(repositoryName)
 	lock.Lock()
 	defer lock.Unlock()
@@ -207,14 +232,26 @@ func (g *gitClient) SupplyRefsHeads(repositoryName string, supplier func(ref str
 		return err
 	}
 	err = iter.ForEach(func(ref *plumbing.Reference) error {
-		if strings.HasPrefix(string(ref.Name()), "refs/remotes/origin/") {
+		name := string(ref.Name())
+		switch {
+		case strings.HasPrefix(name, "refs/remotes/origin/"):
 			refName := strings.Replace(ref.Name().Short(), "origin/", "", 1)
-			log.Debugf("ref: %v", refName)
+			log.Debugf("branch: %v", refName)
 			commit, err := g.getCommitByHash(r, ref.Hash())
 			if err != nil {
 				return err
 			}
-			supplier(refName, commit)
+			supplier(refName, commit, RefKindBranch)
+		case strings.HasPrefix(name, "refs/tags/"):
+			refName := ref.Name().Short() // strips refs/tags/
+			log.Debugf("tag: %v", refName)
+			commit, err := g.resolveTagCommit(r, ref.Hash())
+			if err != nil {
+				// a single unresolvable tag must not abort the whole scan
+				log.Warnf("skipping tag %s in %s: %v", refName, repositoryName, err)
+				return nil
+			}
+			supplier(refName, commit, RefKindTag)
 		}
 		return nil
 	})
@@ -271,7 +308,8 @@ type gitStorage struct {
 	eventsObserver utils.Observer
 	mu             sync.RWMutex
 	commits        map[string]*api.Commit
-	branches       map[string]map[string]*api.Commit
+	// repo -> ref name -> ref head (carries branch/tag type)
+	refs map[string]map[string]*api.Ref
 }
 
 func NewGitStorage(
@@ -282,7 +320,7 @@ func NewGitStorage(
 		gitClient:      gitClient,
 		eventsObserver: eventsObserver,
 		commits:        map[string]*api.Commit{},
-		branches:       map[string]map[string]*api.Commit{},
+		refs:           map[string]map[string]*api.Ref{},
 	}
 }
 
@@ -290,13 +328,10 @@ func (g *gitStorage) GetAllRefsHeads() ([]*api.Ref, error) {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	result := []*api.Ref{}
-	for repositoryName, v := range g.branches {
-		for ref, commit := range v {
-			result = append(result, &api.Ref{
-				Repository: repositoryName,
-				Commit:     *commit,
-				Ref:        ref,
-			})
+	for _, v := range g.refs {
+		for _, ref := range v {
+			refCopy := *ref
+			result = append(result, &refCopy)
 		}
 	}
 	return result, nil
@@ -326,51 +361,49 @@ func (g *gitStorage) GetCommitByHash(repositoryName string, hash string) (*api.C
 	return commit, nil
 }
 
-func (g *gitStorage) addRefHeadCommit(repositoryName string, ref string, commit *api.Commit) {
+func (g *gitStorage) addRefHeadCommit(repositoryName string, ref string, commit *api.Commit, kind string) {
+	newRef := &api.Ref{
+		Repository: repositoryName,
+		Commit:     *commit,
+		Ref:        ref,
+		Type:       kind,
+	}
 	g.mu.Lock()
 	g.commits[commit.Sha] = commit
-	if _, ok := g.branches[repositoryName]; !ok {
-		g.branches[repositoryName] = map[string]*api.Commit{}
+	if _, ok := g.refs[repositoryName]; !ok {
+		g.refs[repositoryName] = map[string]*api.Ref{}
 	}
-	oldCommit, ok := g.branches[repositoryName][ref]
-	changed := !ok || !reflect.DeepEqual(oldCommit, commit)
+	old, ok := g.refs[repositoryName][ref]
+	changed := !ok || !reflect.DeepEqual(old, newRef)
 	if changed {
-		g.branches[repositoryName][ref] = commit
+		g.refs[repositoryName][ref] = newRef
 	}
 	g.mu.Unlock()
 	if changed {
 		g.eventsObserver.Publish(nil, api.SSEvent{
 			ItemType: "RefHead",
-			Item: api.Ref{
-				Repository: repositoryName,
-				Commit:     *commit,
-				Ref:        ref,
-			},
-			Event: "UPDATED",
+			Item:     *newRef,
+			Event:    "UPDATED",
 		})
 	}
 }
 
 func (g *gitStorage) ScanRefsHeads(repositoryName string) error {
 	seen := map[string]bool{}
-	err := g.gitClient.SupplyRefsHeads(repositoryName, func(ref string, commit *api.Commit) {
+	err := g.gitClient.SupplyRefsHeads(repositoryName, func(ref string, commit *api.Commit, kind string) {
 		seen[ref] = true
-		g.addRefHeadCommit(repositoryName, ref, commit)
+		g.addRefHeadCommit(repositoryName, ref, commit, kind)
 	})
 	if err != nil {
 		return err
 	}
-	// evict branches deleted upstream so the UI stops offering stale refs
+	// evict refs deleted upstream so the UI stops offering stale branches/tags
 	g.mu.Lock()
 	var deleted []api.Ref
-	for ref, commit := range g.branches[repositoryName] {
+	for ref, refHead := range g.refs[repositoryName] {
 		if !seen[ref] {
-			deleted = append(deleted, api.Ref{
-				Repository: repositoryName,
-				Commit:     *commit,
-				Ref:        ref,
-			})
-			delete(g.branches[repositoryName], ref)
+			deleted = append(deleted, *refHead)
+			delete(g.refs[repositoryName], ref)
 		}
 	}
 	g.mu.Unlock()

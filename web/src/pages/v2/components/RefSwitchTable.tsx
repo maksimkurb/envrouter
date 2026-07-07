@@ -59,10 +59,14 @@ export function RefSwitchTable({ records, showScope }: RefSwitchTableProps) {
               {showScope && <TableCell className="text-xs">{record.environment}</TableCell>}
               {showScope && <TableCell className="text-xs">{record.application}</TableCell>}
               <TableCell className="font-mono text-xs">
-                <span className="inline-flex items-center gap-1.5">
-                  {record.oldRef || '—'}
-                  <MoveRight className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
-                  {record.newRef}
+                <span className="flex items-center gap-1.5">
+                  <span className="max-w-[12rem] truncate" title={record.oldRef}>
+                    {record.oldRef || '—'}
+                  </span>
+                  <MoveRight className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  <span className="max-w-[12rem] truncate" title={record.newRef}>
+                    {record.newRef}
+                  </span>
                 </span>
               </TableCell>
               <TableCell className="text-xs">

@@ -278,11 +278,17 @@ export interface Ref {
      */
     'repository': string;
     /**
-     * 
+     *
      * @type {Commit}
      * @memberof Ref
      */
     'commit': Commit;
+    /**
+     * Ref kind: \"branch\" or \"tag\"
+     * @type {string}
+     * @memberof Ref
+     */
+    'type': string;
 }
 /**
  * 

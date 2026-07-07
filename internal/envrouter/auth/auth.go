@@ -14,6 +14,7 @@ package auth
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -49,6 +50,9 @@ type Actor struct {
 	Email          string
 	IP             string
 	Groups         []string
+	// Admin marks a request authenticated via the static API token — it is
+	// permitted at every level regardless of OIDC group config.
+	Admin bool
 }
 
 type Config struct {
@@ -68,6 +72,13 @@ type Config struct {
 	GroupView      string
 	GroupDeploy    string
 	GroupConfigure string
+	// APIToken, when set, enables full-access machine auth via
+	// `Authorization: Bearer <token>` (works whether or not OIDC is enabled).
+	APIToken string
+	// AnonymousLegacyReads, when true, lets allow-listed legacy v1 GET
+	// endpoints be read without a session even when OIDC is enabled — for
+	// CI/automation that predates auth.
+	AnonymousLegacyReads bool
 }
 
 func getEnv(key, fallback string) string {
@@ -106,6 +117,9 @@ func ConfigFromEnv() Config {
 		GroupView:      os.Getenv("ENVROUTER_OIDC_GROUP_VIEW"),
 		GroupDeploy:    os.Getenv("ENVROUTER_OIDC_GROUP_DEPLOY"),
 		GroupConfigure: os.Getenv("ENVROUTER_OIDC_GROUP_CONFIGURE"),
+
+		APIToken:             os.Getenv("ENVROUTER_API_TOKEN"),
+		AnonymousLegacyReads: os.Getenv("ENVROUTER_ANONYMOUS_LEGACY_READS") == "true",
 	}
 }
 
@@ -117,6 +131,12 @@ type Service struct {
 }
 
 func New(ctx context.Context, cfg Config) (*Service, error) {
+	if cfg.APIToken != "" {
+		log.Info("Static API token auth enabled (Authorization: Bearer)")
+	}
+	if cfg.AnonymousLegacyReads {
+		log.Info("Anonymous legacy v1 read endpoints enabled")
+	}
 	if cfg.Issuer == "" {
 		log.Info("OIDC authentication disabled (ENVROUTER_OIDC_ISSUER not set)")
 		return &Service{cfg: cfg}, nil
@@ -152,6 +172,9 @@ func (s *Service) Enabled() bool {
 // user; otherwise the actor must be a member.
 func (s *Service) permitted(a Actor, group string) bool {
 	if !s.Enabled() {
+		return true
+	}
+	if a.Admin {
 		return true
 	}
 	if group == "" {
@@ -339,15 +362,79 @@ func (s *Service) actorFromSession(c *gin.Context) (Actor, error) {
 	return actor, nil
 }
 
+// legacyReadPrefixes are the v1 GET endpoints external automation relies on
+// (deployment state only — never repositories/credentialsSecrets/applications
+// config, nor any /api/v2/*). Opened to anonymous readers when
+// ENVROUTER_ANONYMOUS_LEGACY_READS is set.
+var legacyReadPrefixes = []string{
+	"/api/v1/refBindings",
+	"/api/v1/environments",
+	"/api/v1/instances",
+	"/api/v1/instancePods",
+	"/api/v1/git/refs",
+	"/api/v1/git/repositories", // commit lookups (.../commits/:sha)
+}
+
+// isLegacyReadPath matches an exact allow-listed path or any sub-path under it
+// (the trailing-slash check keeps the boundary tight, so "/api/v1/refBindings"
+// won't match a hypothetical "/api/v1/refBindingsX").
+func isLegacyReadPath(path string) bool {
+	for _, p := range legacyReadPrefixes {
+		if path == p || strings.HasPrefix(path, p+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// bearerToken extracts the token from an `Authorization: Bearer <token>`
+// header, or "" if absent/malformed.
+func bearerToken(r *http.Request) string {
+	const prefix = "Bearer "
+	h := r.Header.Get("Authorization")
+	if len(h) > len(prefix) && strings.EqualFold(h[:len(prefix)], prefix) {
+		return h[len(prefix):]
+	}
+	return ""
+}
+
 // Middleware guards /api/* when auth is enabled and attaches the Actor to
-// the gin context in every mode.
+// the gin context in every mode. Two machine-auth escape hatches apply to
+// /api/* before the session gate: a static bearer token (full admin) and an
+// optional anonymous-read allow-list for legacy v1 GETs.
 func (s *Service) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if !s.Enabled() || !strings.HasPrefix(c.Request.URL.Path, "/api/") {
+		isAPI := strings.HasPrefix(c.Request.URL.Path, "/api/")
+
+		// Static API token: full-access machine auth, independent of OIDC.
+		// Constant-time compare; wrong/absent token falls through.
+		if isAPI && s.cfg.APIToken != "" {
+			if tok := bearerToken(c.Request); tok != "" &&
+				subtle.ConstantTimeCompare([]byte(tok), []byte(s.cfg.APIToken)) == 1 {
+				c.Set(actorKey, Actor{
+					UserIdentifier: "api-token",
+					FullName:       "API token",
+					Admin:          true,
+					IP:             c.ClientIP(),
+				})
+				c.Next()
+				return
+			}
+		}
+
+		if !s.Enabled() || !isAPI {
 			c.Set(actorKey, Actor{IP: c.ClientIP()})
 			c.Next()
 			return
 		}
+
+		// Anonymous legacy reads: allow-listed v1 GETs without a session.
+		if s.cfg.AnonymousLegacyReads && c.Request.Method == http.MethodGet && isLegacyReadPath(c.Request.URL.Path) {
+			c.Set(actorKey, Actor{IP: c.ClientIP()})
+			c.Next()
+			return
+		}
+
 		actor, err := s.actorFromSession(c)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "session invalid or expired"})

@@ -151,6 +151,7 @@ components:
         - ref
         - repository
         - commit
+        - type
       properties:
         ref:
           type: string
@@ -158,6 +159,9 @@ components:
           type: string
         commit:
           $ref: "#/components/schemas/Commit"
+        type:
+          type: string
+          description: 'Ref kind: "branch" or "tag"'
 
 paths:
   "/api/v1/repositories":

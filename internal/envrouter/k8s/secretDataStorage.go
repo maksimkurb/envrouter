@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"fmt"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -58,6 +59,10 @@ func (s *secretDataStorage) Save(key string, data map[string][]byte) error {
 					},
 				},
 			}
+		} else if !s.secretIsManaged(secret) {
+			// Never overwrite a pre-existing secret we don't own: refuse rather
+			// than clobber an unrelated secret whose name happens to collide.
+			return fmt.Errorf("refusing to overwrite secret %q: not managed by envrouter", key)
 		}
 
 		secret.Data = data
@@ -97,6 +102,12 @@ func (s *secretDataStorage) GetByName(name string) (map[string][]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Same guard as delete: a name is user-controlled (a repository's
+	// credentialsSecret field), so only ever hand back secrets envrouter
+	// manages — never leak an unrelated secret's data.
+	if !s.secretIsManaged(item) {
+		return nil, fmt.Errorf("secret %q is not managed by envrouter", name)
+	}
 	return item.Data, nil
 }
 
@@ -105,5 +116,26 @@ func (s *secretDataStorage) DeleteByName(name string) error {
 	if err != nil {
 		return err
 	}
-	return clientset.CoreV1().Secrets(s.namespace).Delete(s.ctx, name, metav1.DeleteOptions{})
+	// Only ever delete secrets envrouter itself manages: a name is
+	// user-controlled (DELETE .../credentialsSecrets/:name), so without this
+	// check a crafted name could wipe an unrelated secret (TLS, another app's)
+	// living in the same namespace.
+	secret, err := clientset.CoreV1().Secrets(s.namespace).Get(s.ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	if !s.secretIsManaged(secret) {
+		return fmt.Errorf("refusing to delete secret %q: not managed by envrouter", name)
+	}
+	// UID precondition deletes exactly the object we validated, closing the
+	// relabel-between-get-and-delete race.
+	return clientset.CoreV1().Secrets(s.namespace).Delete(s.ctx, name, metav1.DeleteOptions{
+		Preconditions: &metav1.Preconditions{UID: &secret.UID},
+	})
+}
+
+// secretIsManaged reports whether a secret carries envrouter's type label and
+// is therefore safe to mutate/delete on the user's behalf.
+func (s *secretDataStorage) secretIsManaged(secret *apiv1.Secret) bool {
+	return secret != nil && secret.Labels[SecretTypeLabelKey] == s.secretTypeLabelValue
 }

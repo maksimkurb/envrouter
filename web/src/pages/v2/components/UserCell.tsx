@@ -40,20 +40,23 @@ export function UserAvatar({
   )
 }
 
-// Avatar + full name with the email below in gray.
+// Avatar + full name with the email (or identifier fallback) below in gray.
 export function UserCell({ fullName, userIdentifier, email }: UserCellProps) {
   const displayName = fullName || userIdentifier
   if (!displayName && !email) {
     return <span className="text-muted-foreground">anonymous</span>
   }
+  // Always surface a second identity line: the email when present, otherwise
+  // the user identifier when it isn't already the displayed name.
+  const secondary = email || (userIdentifier !== displayName ? userIdentifier : '')
   return (
     <span className="inline-flex items-center gap-2">
       <UserAvatar name={displayName} email={email} />
       <span className="grid min-w-0 text-left leading-tight">
         <span className="truncate font-medium">{displayName || '—'}</span>
-        {email && (
-          <span className="truncate text-xs text-muted-foreground">{email}</span>
-        )}
+        <span className="truncate text-xs text-muted-foreground" title={secondary}>
+          {secondary || '—'}
+        </span>
       </span>
     </span>
   )

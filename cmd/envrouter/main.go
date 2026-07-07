@@ -49,6 +49,20 @@ func main() {
 	client := k8s.NewClient("")
 	eventsObserver := utils.NewObserver()
 
+	// Empty = watch cluster-wide (needs a ClusterRole); a list scopes every
+	// informer to those namespaces (a namespaced Role in each is enough).
+	namespaces := splitTrimmed(os.Getenv("ENVROUTER_NAMESPACES"))
+	// Fail fast if RBAC can't satisfy what we're about to watch/store, rather
+	// than limping along with a silently empty dashboard.
+	if err := client.CheckAccess(namespaces); err != nil {
+		log.Fatalf("RBAC preflight failed: %v", err)
+	}
+	if len(namespaces) > 0 {
+		log.Infof("Watching namespaces: %v", namespaces)
+	} else {
+		log.Info("Watching cluster-wide (all namespaces)")
+	}
+
 	dataStorageFactory := k8s.NewDataStorageFactory(client)
 
 	repositoryService := envrouter.NewRepositoryService(dataStorageFactory.NewRepositoryStorage())
@@ -56,14 +70,14 @@ func main() {
 	credentialsSecretService := envrouter.NewCredentialsSecretService(dataStorageFactory.NewCredentialsSecretStorage())
 
 	deploymentObserver := utils.NewObserver()
-	deploymentService, stop := k8s.NewDeploymentService(context.TODO(), client, deploymentObserver)
+	deploymentService, stop := k8s.NewDeploymentService(context.TODO(), client, deploymentObserver, namespaces)
 	defer close(stop)
 
 	podObserver := utils.NewObserver()
-	podService, stop := k8s.NewPodService(context.TODO(), client, podObserver)
+	podService, stop := k8s.NewPodService(context.TODO(), client, podObserver, namespaces)
 	defer close(stop)
 
-	replicaSetService, stop := k8s.NewReplicaSetService(context.TODO(), client)
+	replicaSetService, stop := k8s.NewReplicaSetService(context.TODO(), client, namespaces)
 	defer close(stop)
 
 	parentService := k8s.NewParentService(context.TODO(), client, replicaSetService)
@@ -128,7 +142,6 @@ func main() {
 	// gzip REST payloads (large repetitive JSON compresses ~10x); SSE streams
 	// are excluded — gzip buffering would break per-event flushing
 	router.Use(gzip.Gzip(gzip.DefaultCompression, gzip.WithExcludedPaths([]string{
-		"/api/v1/subscription",
 		"/api/v2/subscription",
 	})))
 	// guards /api/* when OIDC is enabled; always attaches the request actor
@@ -151,7 +164,6 @@ func main() {
 		gitStorage:               gitStorage,
 		authService:              authService,
 	}
-	router.GET("/api/v1/subscription", server.streamPods)
 	router.GET("/api/v2/subscription", server.streamV2)
 	router.GET("/api/v2/audit/refSwitches", func(c *gin.Context) {
 		environment, application := c.Query("environment"), c.Query("application")
@@ -487,8 +499,6 @@ func (s *ServerInterfaceImpl) streamEvents(c *gin.Context, subscriber chan api.S
 	})
 }
 
-// streamPods is the v1 stream: live deltas only (the v1 UI fetches its own
-// snapshot via the REST endpoints).
 // acquireSSE enforces the global SSE connection cap. Returns false (and writes
 // 503) when the limit is hit; on success the caller must defer releaseSSE.
 func acquireSSE(c *gin.Context) bool {
@@ -501,16 +511,6 @@ func acquireSSE(c *gin.Context) bool {
 }
 
 func releaseSSE() { activeSSE.Add(-1) }
-
-func (s *ServerInterfaceImpl) streamPods(c *gin.Context) {
-	if !acquireSSE(c) {
-		return
-	}
-	defer releaseSSE()
-	subscriber, handler, overflow := s.subscribe(256, false)
-	defer s.eventsObserver.Unsubscribe(handler)
-	s.streamEvents(c, subscriber, overflow)
-}
 
 // streamV2 delivers the complete dashboard state as ONE Snapshot event and
 // then live deltas on the same ordered stream — no REST snapshot, no

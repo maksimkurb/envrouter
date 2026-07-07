@@ -49,6 +49,7 @@ EnvRouter can require login through any OIDC discovery-compliant provider
 | `ENVROUTER_OIDC_GROUP_VIEW` | *(empty = any authenticated user)* | Group required to log in / view. Set it to restrict access to members only |
 | `ENVROUTER_OIDC_GROUP_DEPLOY` | *(empty = any authenticated user)* | Group required to change branch bindings (deploy). Implies view |
 | `ENVROUTER_OIDC_GROUP_CONFIGURE` | *(empty = any authenticated user)* | Group required to edit repositories, applications and credential secrets — and thus webhook URLs. Implies deploy and view |
+| `ENVROUTER_API_TOKEN` | *(empty = disabled)* | Static token for machine/CI access. Requests sending `Authorization: Bearer <token>` are granted full (configure-level) access to the whole API, whether or not OIDC is enabled. Keep it secret, serve over HTTPS, and rotate it; token deploys are audited as `api-token` |
 
 Authorization is group-based and hierarchical: **view** gates API access (a
 user outside the group can log in but every API request returns 403 and the
@@ -69,6 +70,8 @@ for webhook SSRF, since only that level can set webhook URLs.
 | `ENVROUTER_MAX_SSE_CONNECTIONS` | `500` | Max concurrent SSE subscription connections; excess get HTTP 503 |
 | `ENVROUTER_HSTS` | `false` | Set `true` to emit `Strict-Transport-Security` (enable only behind HTTPS) |
 | `ENVROUTER_CORS_ALLOWED_ORIGINS` | *(empty = CORS disabled)* | Comma-separated origins allowed for cross-origin requests (with credentials). The bundled SPA is same-origin and needs none — set this only if a separate frontend origin must call the API |
+| `ENVROUTER_ANONYMOUS_LEGACY_READS` | `false` | When `true`, a fixed set of read-only v1 `GET` endpoints (`/api/v1/refBindings`, `/environments`, `/instances`, `/instancePods`, `/git/refs`, `/git/repositories/…/commits/…`) is reachable **without** a session even while OIDC is enabled — for CI/automation predating auth. Exposes deployment state read-only; writes and all other endpoints stay protected. Prefer `ENVROUTER_API_TOKEN` when the client can send a header |
+| `ENVROUTER_NAMESPACES` | *(empty = cluster-wide)* | Comma-separated namespaces to watch. Empty watches all namespaces and requires a `ClusterRole`; a list scopes every informer to those namespaces so a namespaced `Role` in each is enough. At startup envrouter runs a `SelfSubjectAccessReview` preflight for exactly the scope it will use and **exits 1** if any required permission is missing |
 
 When auth is enabled every `/api/*` route requires a session (the UI redirects
 to the provider automatically). Every branch switch is recorded in an

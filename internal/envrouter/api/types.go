@@ -74,6 +74,8 @@ type Ref struct {
 	Commit     Commit `json:"commit"`
 	Ref        string `json:"ref"`
 	Repository string `json:"repository"`
+	// Type is the ref kind: "branch" or "tag".
+	Type string `json:"type"`
 }
 
 // RefBinding defines model for RefBinding.

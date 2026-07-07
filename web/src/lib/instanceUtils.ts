@@ -1,13 +1,6 @@
 import { Instance, InstancePod, Ref, RefBinding } from '@/axios'
 
 /**
- * Check if a git ref exists in the list of repository refs
- */
-export function refExists(ref: string, refsHeads: Ref[]): boolean {
-  return refsHeads.some((r) => r.ref === ref)
-}
-
-/**
  * Filter instance pods by their parent instance
  */
 export function filterPodsByInstance(

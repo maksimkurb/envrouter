@@ -1,16 +1,22 @@
-import { Fragment, memo, useEffect, useRef, useState } from 'react'
+import { Fragment, memo, useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Command as CommandPrimitive } from 'cmdk'
 import { Application, DefaultApiFp, Instance, InstancePod, Ref, RefBinding } from '@/axios'
 import { TableCell, TableRow } from '@/components/ui/table'
 import { Command, CommandItem, CommandList } from '@/components/ui/command'
 import { Badge } from '@/components/ui/badge'
-import { History, Loader2, Package, PackageOpen } from 'lucide-react'
+import { GitBranch, History, Loader2, Package, PackageOpen, Tag } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
 import { PodRow } from './PodRow'
 import { RefSwitchLogDialog } from './RefSwitchLogDialog'
-import { refExists, isInstanceDeploying, filterPodsByInstance } from '@/lib/instanceUtils'
+import { isInstanceDeploying, filterPodsByInstance } from '@/lib/instanceUtils'
+
+// SHA-shaped strings (short or full) are valid deploy targets even though they
+// are not in the refs list; cache live-verification results per repo:sha.
+const SHA_RE = /^[0-9a-f]{7,40}$/i
+const shaVerifyCache = new Map<string, boolean>()
 
 interface ServiceRowProps {
   environmentName: string
@@ -59,6 +65,12 @@ export const ServiceRow = memo(function ServiceRow({
   // Enter deploys via onSelect and the following blur must not deploy again
   const lastDeployed = useRef<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  // wrapper we measure to position the portaled suggestion list
+  const anchorRef = useRef<HTMLDivElement>(null)
+  // live SHA verification: null = unknown/checking, true/false = resolved
+  const [shaValid, setShaValid] = useState<boolean | null>(null)
+  // fixed-position rect for the portaled dropdown (escapes the table's overflow)
+  const [menuRect, setMenuRect] = useState<{ top: number; left: number; width: number } | null>(null)
 
   // Sync local state with prop changes, but never clobber the input mid-edit
   // or while a deploy is in flight (the binding still carries the OLD ref
@@ -122,10 +134,72 @@ export const ServiceRow = memo(function ServiceRow({
   }
 
   const deploying = isInstanceDeploying(refBinding, refsHeads, instancePods)
-  const refIsValid = refExists(ref, refsHeads)
   const errorId = `ref-error-${environmentName}-${application.name}`
 
-  const isCustomRef = !!ref.trim() && !refsHeads.some((r) => r.ref === ref.trim())
+  const trimmedRef = ref.trim()
+  const isKnownRef = refsHeads.some((r) => r.ref === trimmedRef)
+  const shaLike = SHA_RE.test(trimmedRef)
+
+  // Verify a SHA-shaped, non-listed ref against the commits API (debounced,
+  // cached) so a valid commit isn't flagged "does not exist".
+  useEffect(() => {
+    if (!trimmedRef || isKnownRef || !shaLike || !application.repositoryName) {
+      setShaValid(null)
+      return
+    }
+    const key = `${application.repositoryName}:${trimmedRef}`
+    const cached = shaVerifyCache.get(key)
+    if (cached !== undefined) {
+      setShaValid(cached)
+      return
+    }
+    setShaValid(null) // checking
+    let cancelled = false
+    const timer = setTimeout(() => {
+      api
+        .apiV1GitRepositoriesRepositoryNameCommitsShaGet(trimmedRef, application.repositoryName!)
+        .then((request) => request())
+        .then(() => {
+          shaVerifyCache.set(key, true)
+          if (!cancelled) setShaValid(true)
+        })
+        .catch(() => {
+          shaVerifyCache.set(key, false)
+          if (!cancelled) setShaValid(false)
+        })
+    }, 400)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [trimmedRef, isKnownRef, shaLike, application.repositoryName])
+
+  const refIsValid = isKnownRef || (shaLike && shaValid === true)
+  // suppress the error while a SHA is still being checked
+  const showRefError = !!trimmedRef && !isKnownRef && (!shaLike || shaValid === false)
+
+  const isCustomRef = !!trimmedRef && !isKnownRef
+
+  // Position the portaled suggestion list under the input. Portaling escapes
+  // the table's overflow-x-auto, which otherwise clips the dropdown.
+  const updateMenuRect = useCallback(() => {
+    const el = anchorRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    setMenuRect({ top: r.bottom, left: r.left, width: r.width })
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    updateMenuRect()
+    // capture=true so scrolling the table container (not just window) repositions
+    window.addEventListener('scroll', updateMenuRect, true)
+    window.addEventListener('resize', updateMenuRect)
+    return () => {
+      window.removeEventListener('scroll', updateMenuRect, true)
+      window.removeEventListener('resize', updateMenuRect)
+    }
+  }, [open, updateMenuRect])
   const boundSha = refsHeads.find((r) => r.ref === boundRef)?.commit?.sha?.slice(0, 7)
   // with filtering off (pristine focus), DOM order wins: current branch first,
   // so a bare Enter re-selects it and deploys nothing
@@ -172,7 +246,7 @@ export const ServiceRow = memo(function ServiceRow({
             {!canDeploy ? (
               // read-only: no deploy permission — show the current ref, not an editable combobox
               <div className="border-input flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md border bg-transparent px-3 text-sm dark:bg-input/30">
-                <span className="min-w-0 flex-1 truncate">{ref}</span>
+                <span className="min-w-0 flex-1 truncate" title={ref}>{ref}</span>
                 {boundSha && <span className="font-mono text-xs text-muted-foreground">{boundSha}</span>}
                 {deploying && (
                   <Loader2
@@ -186,7 +260,7 @@ export const ServiceRow = memo(function ServiceRow({
               shouldFilter={dirty}
               className="relative min-w-0 flex-1 overflow-visible rounded-none bg-transparent p-0"
             >
-              <div className="relative">
+              <div className="relative" ref={anchorRef}>
                 <CommandPrimitive.Input
                   ref={inputRef}
                   value={ref}
@@ -210,8 +284,8 @@ export const ServiceRow = memo(function ServiceRow({
                     }
                   }}
                   aria-label={`Target branch for ${application.name} in ${environmentName}`}
-                  aria-invalid={!refIsValid && !!ref}
-                  aria-describedby={!refIsValid && ref ? errorId : undefined}
+                  aria-invalid={showRefError}
+                  aria-describedby={showRefError ? errorId : undefined}
                   className={cn(
                     'border-input h-8 w-full rounded-md border bg-transparent px-3 py-1 text-sm outline-none transition-[color,box-shadow]',
                     'placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
@@ -232,35 +306,51 @@ export const ServiceRow = memo(function ServiceRow({
                   )}
                 </div>
               </div>
-              {open && (
-                <CommandList
-                  // keep focus in the input so selecting an item doesn't blur-deploy first
-                  onMouseDown={(e) => e.preventDefault()}
-                  className="absolute top-full left-0 z-50 mt-1 w-full rounded-md border bg-popover text-popover-foreground shadow-md"
-                >
-                  {orderedRefs.map((knownRef) => (
-                    <CommandItem
-                      key={knownRef.ref}
-                      value={knownRef.ref}
-                      onSelect={commitRef}
-                      title={knownRef.ref}
-                    >
-                      <span className="min-w-0 flex-1 truncate">{knownRef.ref}</span>
-                      {knownRef.commit?.sha && (
-                        <span className="ml-2 font-mono text-xs text-muted-foreground">
-                          {knownRef.commit.sha.slice(0, 7)}
+              {open &&
+                menuRect &&
+                createPortal(
+                  <CommandList
+                    // keep focus in the input so selecting an item doesn't blur-deploy first
+                    onMouseDown={(e) => e.preventDefault()}
+                    style={{
+                      position: 'fixed',
+                      top: menuRect.top + 4,
+                      left: menuRect.left,
+                      width: menuRect.width,
+                    }}
+                    className="z-50 max-h-64 overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-md"
+                  >
+                    {orderedRefs.map((knownRef) => (
+                      <CommandItem
+                        key={knownRef.ref}
+                        value={knownRef.ref}
+                        onSelect={commitRef}
+                        title={knownRef.ref}
+                      >
+                        {knownRef.type === 'tag' ? (
+                          <Tag className="mr-1 h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+                        ) : (
+                          <GitBranch className="mr-1 h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+                        )}
+                        <span className="min-w-0 flex-1 truncate">{knownRef.ref}</span>
+                        {knownRef.commit?.sha && (
+                          <span className="ml-2 font-mono text-xs text-muted-foreground">
+                            {knownRef.commit.sha.slice(0, 7)}
+                          </span>
+                        )}
+                      </CommandItem>
+                    ))}
+                    {isCustomRef && (
+                      <CommandItem value={trimmedRef} onSelect={commitRef} title={trimmedRef}>
+                        <span className="min-w-0 flex-1 truncate">{trimmedRef}</span>
+                        <span className="ml-1 shrink-0 text-muted-foreground">
+                          {shaLike ? '(commit)' : '(custom ref)'}
                         </span>
-                      )}
-                    </CommandItem>
-                  ))}
-                  {isCustomRef && (
-                    <CommandItem value={ref.trim()} onSelect={commitRef} title={ref.trim()}>
-                      {ref.trim()}
-                      <span className="ml-1 text-muted-foreground">(custom ref)</span>
-                    </CommandItem>
-                  )}
-                </CommandList>
-              )}
+                      </CommandItem>
+                    )}
+                  </CommandList>,
+                  document.body
+                )}
             </Command>
             )}
             <Button
@@ -283,7 +373,7 @@ export const ServiceRow = memo(function ServiceRow({
             {editing && ref !== boundRef && (
               <p className="text-xs text-muted-foreground">Enter or Tab deploys, Esc cancels</p>
             )}
-            {!refIsValid && ref && (
+            {showRefError && (
               <p id={errorId} role="alert" className="text-xs text-destructive">
                 Ref does not exist
               </p>
@@ -308,7 +398,9 @@ export const ServiceRow = memo(function ServiceRow({
                   ) : undefined
                 }
               >
-                {instance.name}: {pods.length}, {instance.ref}
+                <span className="truncate" title={`${instance.name}: ${pods.length}, ${instance.ref}`}>
+                  {instance.name}: {pods.length}, {instance.ref}
+                </span>
               </Badge>
             ))}
           </div>

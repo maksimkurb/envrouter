@@ -3,9 +3,7 @@ package k8s
 import (
 	"context"
 	"k8s.io/api/apps/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
-	"time"
 )
 
 type ReplicaSetService interface {
@@ -15,44 +13,42 @@ type ReplicaSetService interface {
 type replicaSetService struct {
 	ctx    context.Context
 	client *client
-	store  cache.Store
+	stores []cache.Store
 }
 
 func NewReplicaSetService(
 	ctx context.Context,
 	client *client,
+	namespaces []string,
 ) (ReplicaSetService, chan struct{}) {
-	var err error
 	clientset, _, err := client.getK8sClient()
 	if err != nil {
 		panic(err)
 	}
-	optionsModifier := func(options *metav1.ListOptions) {
-		options.LabelSelector = ApplicationLabelKey
-	}
-	watchlist := cache.NewFilteredListWatchFromClient(clientset.AppsV1().RESTClient(), "replicasets", "", optionsModifier)
-	store, controller := cache.NewInformer(
-		watchlist,
+	stores, stop := startInformers(
+		clientset.AppsV1().RESTClient(),
+		"replicasets",
+		namespaces,
 		&v1.ReplicaSet{},
-		time.Minute*5,
 		cache.ResourceEventHandlerFuncs{},
 	)
-	stop := make(chan struct{})
-	go controller.Run(stop)
 	return &replicaSetService{
 		ctx,
 		client,
-		store,
+		stores,
 	}, stop
 }
 
 func (d *replicaSetService) Get(namespace string, name string) (*v1.ReplicaSet, error) {
-	replicaSets, exists, err := d.store.GetByKey(namespace + "/" + name)
-	if err != nil {
-		return nil, err
+	key := namespace + "/" + name
+	for _, store := range d.stores {
+		replicaSet, exists, err := store.GetByKey(key)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			return replicaSet.(*v1.ReplicaSet), nil
+		}
 	}
-	if !exists {
-		return nil, nil
-	}
-	return replicaSets.(*v1.ReplicaSet), nil
+	return nil, nil
 }

@@ -12,7 +12,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Sun,
-  Undo2,
   UserRound,
 } from "lucide-react"
 import { BASE_PATH } from "@/axios/base"
@@ -30,7 +29,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarSeparator,
   useSidebar,
 } from "@/components/ui/sidebar"
 import {
@@ -214,13 +212,6 @@ export function AppSidebar({
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
-              <SidebarSeparator className="mx-0 my-2 group-data-[collapsible=icon]:hidden" />
-              <SidebarMenuItem className="group-data-[collapsible=icon]:hidden">
-                <SidebarMenuButton render={<Link to="/v1" />}>
-                  <Undo2 className="h-4 w-4" aria-hidden="true" />
-                  <span>Back to v1 (MUI)</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
