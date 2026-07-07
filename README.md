@@ -68,12 +68,15 @@ for webhook SSRF, since only that level can set webhook URLs.
 | `ENVROUTER_MAX_BODY_BYTES` | `1048576` | Max request body size in bytes (1 MiB) |
 | `ENVROUTER_MAX_SSE_CONNECTIONS` | `500` | Max concurrent SSE subscription connections; excess get HTTP 503 |
 | `ENVROUTER_HSTS` | `false` | Set `true` to emit `Strict-Transport-Security` (enable only behind HTTPS) |
+| `ENVROUTER_CORS_ALLOWED_ORIGINS` | *(empty = CORS disabled)* | Comma-separated origins allowed for cross-origin requests (with credentials). The bundled SPA is same-origin and needs none — set this only if a separate frontend origin must call the API |
 
 When auth is enabled every `/api/*` route requires a session (the UI redirects
 to the provider automatically). Every branch switch is recorded in an
-in-memory audit log (user, IP, old/new ref — kept until restart, visible via
-the history button next to each service's branch field), and deploy webhooks
-receive GitLab pipeline-trigger variables in the form body:
+in-memory audit log (user, IP, old/new ref — last 50 switches per
+environment/application pair, up to 30 days, lost on restart). It is visible
+via the history button next to each service's branch field and on the
+**History** page; client IPs are shown only to configure-level users. Deploy
+webhooks receive GitLab pipeline-trigger variables in the form body:
 `variables[ENVROUTER_OLD_REF]`, `variables[ENVROUTER_NEW_REF]`,
 `variables[ENVROUTER_TRIGGERED_BY_USERNAME]`,
 `variables[ENVROUTER_TRIGGERED_BY_FULLNAME]`,
