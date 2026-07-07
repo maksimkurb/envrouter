@@ -11,6 +11,7 @@ import { BASE_PATH } from '@/axios/base'
 import { AuthContext, useAuth } from '@/hooks/useAuth'
 import DashboardPage from './pages/v2/DashboardPage';
 import RepositoriesPage from './pages/v2/RepositoriesPage';
+import HistoryPage from './pages/v2/HistoryPage';
 
 const SIDEBAR_STORAGE_KEY = 'envrouter_sidebar'
 
@@ -97,6 +98,7 @@ function V2App() {
                 <Routes>
                   <Route path="/" element={<DashboardPage/>}/>
                   <Route path="/repo" element={<RepositoriesPage/>}/>
+                  <Route path="/history" element={<HistoryPage/>}/>
                 </Routes>
               </div>
             </main>

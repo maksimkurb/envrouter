@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react'
 
+// "Max Kurb" -> "MK"; single token -> first two letters.
+export function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
+  return name.trim().slice(0, 2).toUpperCase()
+}
+
 async function sha256Hex(input: string): Promise<string> {
   const bytes = new TextEncoder().encode(input)
   const digest = await crypto.subtle.digest('SHA-256', bytes)
@@ -11,23 +18,31 @@ async function sha256Hex(input: string): Promise<string> {
 // Gravatar accepts a SHA-256 hex of the lowercased/trimmed email (modern API);
 // SubtleCrypto avoids pulling in an MD5 dependency. `d=404` makes Gravatar
 // return 404 when the user has no avatar, so the caller can fall back to
-// initials. Returns undefined until the async hash resolves (or no email).
+// initials; pass e.g. 'mp' where a built-in placeholder is wanted instead
+// (browser notifications can't fall back).
+export async function gravatarUrl(
+  email: string | undefined,
+  size = 64,
+  fallback = '404'
+): Promise<string | undefined> {
+  const normalized = email?.trim().toLowerCase()
+  if (!normalized) return undefined
+  try {
+    const hash = await sha256Hex(normalized)
+    return `https://www.gravatar.com/avatar/${hash}?s=${size}&d=${fallback}`
+  } catch {
+    return undefined
+  }
+}
+
+// Returns undefined until the async hash resolves (or no email).
 export function useGravatar(email: string | undefined, size = 64): string | undefined {
   const [url, setUrl] = useState<string>()
   useEffect(() => {
-    const normalized = email?.trim().toLowerCase()
-    if (!normalized) {
-      setUrl(undefined)
-      return
-    }
     let cancelled = false
-    sha256Hex(normalized)
-      .then((hash) => {
-        if (!cancelled) setUrl(`https://www.gravatar.com/avatar/${hash}?s=${size}&d=404`)
-      })
-      .catch(() => {
-        if (!cancelled) setUrl(undefined)
-      })
+    gravatarUrl(email, size).then((resolved) => {
+      if (!cancelled) setUrl(resolved)
+    })
     return () => {
       cancelled = true
     }

@@ -12,11 +12,12 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Sun,
+  Undo2,
   UserRound,
 } from "lucide-react"
 import { BASE_PATH } from "@/axios/base"
 import { Button } from "@/components/ui/button"
-import { useGravatar } from "@/lib/gravatar"
+import { initialsOf, useGravatar } from "@/lib/gravatar"
 import type { AuthInfo } from "@/hooks/useAuth"
 import {
   Sidebar,
@@ -47,6 +48,11 @@ const data = {
       title: "Dashboard",
       url: "/",
       icon: Home,
+    },
+    {
+      title: "History",
+      url: "/history",
+      icon: History,
     },
     {
       title: "Repositories",
@@ -114,13 +120,6 @@ function accessMode(auth: AuthInfo): string {
   if (auth.canConfigure) return "Administrator"
   if (auth.canDeploy) return "Editor"
   return "View only"
-}
-
-// "Max Kurb" -> "MK"; single token -> first two letters.
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
-  return name.trim().slice(0, 2).toUpperCase()
 }
 
 // Card with avatar + name + access mode + logout. Mirrors SidebarMenuButton's
@@ -218,7 +217,7 @@ export function AppSidebar({
               <SidebarSeparator className="mx-0 my-2 group-data-[collapsible=icon]:hidden" />
               <SidebarMenuItem className="group-data-[collapsible=icon]:hidden">
                 <SidebarMenuButton render={<Link to="/v1" />}>
-                  <History className="h-4 w-4" aria-hidden="true" />
+                  <Undo2 className="h-4 w-4" aria-hidden="true" />
                   <span>Back to v1 (MUI)</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
